@@ -1,0 +1,287 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
+using Scriptly.Models;
+using Scriptly.Services;
+using System.Windows.Markup;
+using System.Windows.Data;
+
+namespace Scriptly.Windows;
+
+// Converter for showing shortcut badge only when not empty
+[ValueConversion(typeof(string), typeof(Visibility))]
+public class StringToVisibilityConverter : MarkupExtension, System.Windows.Data.IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        => value is string s && !string.IsNullOrWhiteSpace(s) ? Visibility.Visible : Visibility.Collapsed;
+
+    public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        => throw new NotImplementedException();
+
+    public override object ProvideValue(IServiceProvider serviceProvider) => this;
+}
+
+public partial class ActionPanelWindow : Window
+{
+    private readonly ActionsService _actionsService;
+    private readonly AiService _aiService;
+    private readonly TextCaptureService _textCapture;
+    private readonly SettingsService _settingsService;
+    private List<ActionItem> _allActions = new();
+    private string _selectedText = string.Empty;
+
+    // Guard: prevents Deactivated from closing right as the window appears
+    private bool _allowDeactivateClose = false;
+
+    public ActionPanelWindow(
+        ActionsService actionsService,
+        AiService aiService,
+        TextCaptureService textCapture,
+        SettingsService settingsService)
+    {
+        _actionsService = actionsService;
+        _aiService = aiService;
+        _textCapture = textCapture;
+        _settingsService = settingsService;
+
+        InitializeComponent();
+
+        // Only close on deactivation after the guard period has elapsed
+        Deactivated += (_, _) => { if (_allowDeactivateClose) AnimateClose(); };
+        Loaded += OnLoaded;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e) => SearchBox.Focus();
+
+    public void ShowWithText(string selectedText, System.Windows.Point cursorPos)
+    {
+        _selectedText = selectedText;
+        _allActions = _actionsService.GetSmartSuggestions(selectedText);
+
+        var settings = _settingsService.Load();
+        ProviderLabel.Text = settings.ActiveProvider;
+
+        RefreshList(string.Empty);
+        PositionNearCursor(cursorPos);
+
+        SearchBox.Text = string.Empty;
+
+        // Lock out Deactivated-close until all activation/focus events settle
+        _allowDeactivateClose = false;
+
+        Show();
+        Activate();
+        SearchBox.Focus();
+
+        // AnimateOpen every time — Loaded only fires once, so this handles repeated show/hide cycles
+        AnimateOpen();
+
+        // Allow deactivation-close only after the dispatcher has fully processed all focus events
+        Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.ApplicationIdle,
+            new Action(() => _allowDeactivateClose = true));
+    }
+
+    private void PositionNearCursor(System.Windows.Point cursor)
+    {
+        // Get screen working area
+        var screen = SystemParameters.WorkArea;
+        var dpi = VisualTreeHelper.GetDpi(this);
+
+        double x = cursor.X / dpi.DpiScaleX;
+        double y = cursor.Y / dpi.DpiScaleY;
+
+        // Offset slightly from cursor
+        x += 12;
+        y += 12;
+
+        // Keep on screen
+        if (x + ActualWidth > screen.Right) x = screen.Right - ActualWidth - 10;
+        if (y + 450 > screen.Bottom) y = y - 450 - 20;
+        if (x < screen.Left) x = screen.Left + 10;
+        if (y < screen.Top) y = screen.Top + 10;
+
+        Left = x;
+        Top = y;
+    }
+
+    private void RefreshList(string filter)
+    {
+        var filtered = string.IsNullOrWhiteSpace(filter)
+            ? _allActions
+            : _allActions.Where(a =>
+                a.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                a.Description.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        ActionsList.ItemsSource = filtered;
+
+        if (filtered.Count > 0)
+            ActionsList.SelectedIndex = 0;
+    }
+
+    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        RefreshList(SearchBox.Text);
+    }
+
+    private void SearchBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case Key.Escape:
+                AnimateClose();
+                e.Handled = true;
+                break;
+
+            case Key.Down:
+                if (ActionsList.Items.Count > 0)
+                {
+                    ActionsList.SelectedIndex = Math.Min(ActionsList.SelectedIndex + 1, ActionsList.Items.Count - 1);
+                    ActionsList.ScrollIntoView(ActionsList.SelectedItem);
+                }
+                e.Handled = true;
+                break;
+
+            case Key.Up:
+                if (ActionsList.Items.Count > 0)
+                {
+                    ActionsList.SelectedIndex = Math.Max(ActionsList.SelectedIndex - 1, 0);
+                    ActionsList.ScrollIntoView(ActionsList.SelectedItem);
+                }
+                e.Handled = true;
+                break;
+
+            case Key.Enter:
+                ExecuteSelected();
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void ActionsList_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) { ExecuteSelected(); e.Handled = true; }
+        if (e.Key == Key.Escape) { AnimateClose(); e.Handled = true; }
+    }
+
+    private void ActionsList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        ExecuteSelected();
+    }
+
+    // Single-click on a list item executes that action
+    private void ActionsList_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        // Only fire if the click landed on an actual item container (not scrollbar / padding)
+        if (e.OriginalSource is FrameworkElement fe &&
+            ItemsControl.ContainerFromElement(ActionsList, fe) is ListBoxItem)
+        {
+            ExecuteSelected();
+        }
+    }
+
+    private void ActionsList_SelectionChanged(object sender, SelectionChangedEventArgs e) { }
+
+    private void ExecuteSelected()
+    {
+        if (ActionsList.SelectedItem is not ActionItem action) return;
+        if (string.IsNullOrWhiteSpace(action.Prompt)) return;
+
+        AnimateClose(onComplete: () =>
+        {
+            // Defer to next dispatcher frame so we're fully outside the animation callback
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                var resultWindow = new ResultWindow(_aiService, _textCapture, _settingsService);
+                resultWindow.ShowWithProcessing(action, _selectedText);
+            }));
+        });
+    }
+
+    // Window-level preview handler: catches keys regardless of which child has focus.
+    // This makes arrow navigation + Enter work even when focus drifts to the ListBox.
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case Key.Escape:
+                AnimateClose();
+                e.Handled = true;
+                break;
+
+            case Key.Enter:
+                ExecuteSelected();
+                e.Handled = true;
+                break;
+
+            case Key.Down:
+                if (ActionsList.Items.Count > 0)
+                {
+                    ActionsList.SelectedIndex = Math.Min(ActionsList.SelectedIndex + 1, ActionsList.Items.Count - 1);
+                    ActionsList.ScrollIntoView(ActionsList.SelectedItem);
+                }
+                e.Handled = true;
+                break;
+
+            case Key.Up:
+                if (ActionsList.Items.Count > 0)
+                {
+                    ActionsList.SelectedIndex = Math.Max(ActionsList.SelectedIndex - 1, 0);
+                    ActionsList.ScrollIntoView(ActionsList.SelectedItem);
+                }
+                e.Handled = true;
+                break;
+        }
+        base.OnPreviewKeyDown(e);
+    }
+
+    // ── Animations ──────────────────────────────────────────
+    private void AnimateOpen()
+    {
+        var dur = new Duration(TimeSpan.FromMilliseconds(200));
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+        // Opacity
+        var opacityAnim = new DoubleAnimation(0, 1, dur) { EasingFunction = ease };
+        RootBorder.BeginAnimation(OpacityProperty, opacityAnim);
+
+        // Scale
+        var scaleAnim = new DoubleAnimation(0.92, 1.0, dur) { EasingFunction = ease };
+        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleAnim);
+        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleAnim);
+
+        // Translate
+        var transAnim = new DoubleAnimation(8, 0, dur) { EasingFunction = ease };
+        TranslateT.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, transAnim);
+    }
+
+    private void AnimateClose(Action? onComplete = null)
+    {
+        if (!IsVisible) { onComplete?.Invoke(); return; }
+
+        _allowDeactivateClose = false; // prevent Deactivated re-entry during close
+
+        var dur = new Duration(TimeSpan.FromMilliseconds(160));
+        var ease = new CubicEase { EasingMode = EasingMode.EaseIn };
+
+        var opacityAnim = new DoubleAnimation(1, 0, dur) { EasingFunction = ease };
+        opacityAnim.Completed += (_, _) =>
+        {
+            Hide();
+            // Clear animation holds so XAML base values (Opacity=0, Scale=0.92, Y=8) restore cleanly
+            // This ensures AnimateOpen starts from the correct XAML baseline on the next show
+            RootBorder.BeginAnimation(OpacityProperty, null);
+            ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, null);
+            ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, null);
+            TranslateT.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
+            onComplete?.Invoke();
+        };
+        RootBorder.BeginAnimation(OpacityProperty, opacityAnim);
+
+        var scaleAnim = new DoubleAnimation(1.0, 0.94, dur) { EasingFunction = ease };
+        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleAnim);
+        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleAnim);
+    }
+}
