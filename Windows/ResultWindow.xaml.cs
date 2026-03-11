@@ -11,74 +11,140 @@ public partial class ResultWindow : Window
     private readonly AiService _aiService;
     private readonly TextCaptureService _textCapture;
     private readonly SettingsService _settingsService;
+    private readonly HistoryService _historyService;
     private CancellationTokenSource? _cts;
     private string _resultText = string.Empty;
 
-    public ResultWindow(AiService aiService, TextCaptureService textCapture, SettingsService settingsService)
+    // Remembered for Regenerate and FullEditor
+    private ActionItem? _currentAction;
+    private string _currentSelectedText = string.Empty;
+
+    public ResultWindow(
+        AiService aiService,
+        TextCaptureService textCapture,
+        SettingsService settingsService,
+        HistoryService historyService)
     {
         _aiService = aiService;
         _textCapture = textCapture;
         _settingsService = settingsService;
+        _historyService = historyService;
 
         InitializeComponent();
-        // Result window does NOT auto-close on deactivation — user must
-        // explicitly Copy, Replace, press Escape, or click X.
-        Loaded += OnLoaded;
     }
 
-    private void OnLoaded(object s, RoutedEventArgs e)
-    {
-        StartThinkingAnimation();
-        AnimateOpen(); // Without this RootBorder stays at Opacity=0
-    }
+    // ── Entry point — safe to call multiple times on the same instance ───────
 
     public void ShowWithProcessing(ActionItem action, string selectedText)
     {
-        ActionIcon.Text = action.Icon;
+        // Cancel any in-flight request from a previous use
+        _cts?.Cancel();
+        _resultText = string.Empty;
+
+        // Remember for Regenerate / Expand
+        _currentAction       = action;
+        _currentSelectedText = selectedText;
+
+        // Reset all panels to the initial "thinking" state
+        ThinkingPanel.Visibility  = Visibility.Visible;
+        ResultPanel.Visibility    = Visibility.Collapsed;
+        ErrorPanel.Visibility     = Visibility.Collapsed;
+        ButtonPanel.Visibility    = Visibility.Collapsed;
+        ExpandButton.Visibility   = Visibility.Collapsed;
+        ResultText.Text           = string.Empty;
+        ErrorText.Text            = string.Empty;
+
+        // Clear animation holds from previous close so XAML base values restore:
+        //   RootBorder.Opacity → 0, ScaleT → 0.94, TranslateT.Y → -10
+        RootBorder.BeginAnimation(OpacityProperty, null);
+        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, null);
+        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, null);
+        TranslateT.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
+        ResultPanel.BeginAnimation(OpacityProperty, null);
+
+        ActionIcon.Text  = action.Icon;
         ActionTitle.Text = action.Name;
 
-        // Position: centre of screen, slightly above middle
         var screen = SystemParameters.WorkArea;
         Left = (screen.Width - Width) / 2;
-        Top = (screen.Height - 400) / 2;
+        Top  = (screen.Height - 400) / 2;
 
         Show();
         Activate();
 
+        // Start animations explicitly every time (Loaded only fires on first Show)
+        StartThinkingAnimation();
+        AnimateOpen();
+
         _ = ProcessAsync(action, selectedText);
     }
 
+    // ── Streaming processor ──────────────────────────────────────────────────
+
     private async Task ProcessAsync(ActionItem action, string selectedText)
     {
-        _cts?.Cancel();
         _cts = new CancellationTokenSource();
+        bool firstToken = true;
 
         try
         {
-            var result = await _aiService.ProcessAsync(action.Prompt!, selectedText, _cts.Token);
-            _resultText = result.Trim();
+            await foreach (var token in _aiService.StreamAsync(action.Prompt!, selectedText, _cts.Token))
+            {
+                var t = token;
+                Dispatcher.Invoke(() =>
+                {
+                    // On the very first token: swap thinking panel → result panel
+                    if (firstToken)
+                    {
+                        firstToken = false;
+                        ThinkingPanel.Visibility = Visibility.Collapsed;
+                        ResultPanel.Visibility   = Visibility.Visible;
+                        ButtonPanel.Visibility   = Visibility.Visible;
+                        ExpandButton.Visibility  = Visibility.Visible;
+                        AnimateResultIn();
+                    }
+                    _resultText     += t;
+                    ResultText.Text  = _resultText;
+                    ResultText.ScrollToEnd();
+                });
+            }
 
+            // Stream complete — ensure buttons are visible even if stream was empty
             Dispatcher.Invoke(() =>
             {
                 ThinkingPanel.Visibility = Visibility.Collapsed;
-                ResultPanel.Visibility = Visibility.Visible;
-                ResultText.Text = _resultText;
-                ButtonPanel.Visibility = Visibility.Visible;
-                AnimateResultIn();
+                ButtonPanel.Visibility   = Visibility.Visible;
+                if (firstToken) // zero tokens received
+                {
+                    ErrorPanel.Visibility = Visibility.Visible;
+                    ErrorText.Text        = "No response received from the AI.";
+                }
+                else
+                {
+                    // Persist to history only when we have a complete result
+                    _historyService.Add(new HistoryEntry
+                    {
+                        ActionId     = _currentAction!.Id,
+                        ActionName   = _currentAction!.Name,
+                        ActionIcon   = _currentAction!.Icon,
+                        SelectedText = _currentSelectedText,
+                        Result       = _resultText
+                    });
+                }
             });
         }
         catch (OperationCanceledException)
         {
-            // Window was closed before result
+            // Window was closed or reused before stream completed — expected, ignore
         }
         catch (Exception ex)
         {
             Dispatcher.Invoke(() =>
             {
                 ThinkingPanel.Visibility = Visibility.Collapsed;
-                ErrorPanel.Visibility = Visibility.Visible;
-                ErrorText.Text = ex.Message;
-                ButtonPanel.Visibility = Visibility.Visible;
+                ErrorPanel.Visibility    = Visibility.Visible;
+                ErrorText.Text           = ex.Message;
+                ButtonPanel.Visibility   = Visibility.Visible;
             });
         }
     }
@@ -107,6 +173,19 @@ public partial class ResultWindow : Window
             await Task.Delay(150); // allow window to fully close & source app to regain focus
             await _textCapture.ReplaceSelectedTextAsync(text);
         });
+    }
+
+    private void RegenerateButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentAction != null)
+            ShowWithProcessing(_currentAction, _currentSelectedText);
+    }
+
+    private void ExpandButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentAction == null || string.IsNullOrEmpty(_resultText)) return;
+        var editor = new FullEditorWindow(_resultText, _currentAction, _textCapture);
+        editor.Show();
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e) => AnimateClose();

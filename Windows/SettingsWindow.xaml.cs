@@ -39,6 +39,13 @@ public partial class SettingsWindow : Window
         HotkeyModifiers.Text = _settings.HotkeyModifiers;
         HotkeyKey.Text = _settings.HotkeyKey;
 
+        // General
+        StartWithWindowsCheck.IsChecked = StartupService.IsEnabled();
+
+        // Version
+        var v = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+        VersionLabel.Text = $"Scriptly v{v?.Major}.{v?.Minor}.{v?.Build ?? 0}";
+
         // Custom actions
         RefreshCustomActions();
     }
@@ -70,6 +77,9 @@ public partial class SettingsWindow : Window
 
         if (ProviderCombo.SelectedItem is ComboBoxItem item)
             _settings.ActiveProvider = item.Tag?.ToString() ?? "OpenRouter";
+
+        _settings.StartWithWindows = StartWithWindowsCheck.IsChecked == true;
+        StartupService.Apply(_settings.StartWithWindows);
 
         _settingsService.Save(_settings);
         _onSaved?.Invoke(_settings);
@@ -120,5 +130,12 @@ public partial class SettingsWindow : Window
             _settings.CustomActions.RemoveAll(a => a.Id == action.Id);
             RefreshCustomActions();
         }
+    }
+
+    private void ReleasesButton_Click(object sender, RoutedEventArgs e)
+    {
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+            "https://github.com/scriptly-app/scriptly/releases")
+            { UseShellExecute = true });
     }
 }

@@ -201,6 +201,14 @@
                         </StackPanel>
                     </Grid>
 
+                    <!-- ── General ── -->
+                    <TextBlock Text="GENERAL" Style="{StaticResource SectionHeader}"/>
+                    <Border Background="#1A1A28" CornerRadius="8" Padding="12,10" Margin="0,0,0,12">
+                        <CheckBox x:Name="StartWithWindowsCheck"
+                                  Content="Start Scriptly automatically when Windows starts"
+                                  Foreground="#B0B0C8" FontSize="13" Cursor="Hand"/>
+                    </Border>
+
                     <!-- ── Custom Actions ── -->
                     <Grid Margin="0,0,0,8">
                         <Grid.ColumnDefinitions>
@@ -252,6 +260,36 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <!-- ── About ── -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
+                                Margin="0,12,0,8">
+                        <TextBlock x:Name="VersionLabel" FontSize="11" Foreground="#38385A"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Text=" · " FontSize="11" Foreground="#2E2E50"
+                                   VerticalAlignment="Center"/>
+                        <Button x:Name="ReleasesButton"
+                                Content="View releases"
+                                Click="ReleasesButton_Click"
+                                Background="Transparent" BorderThickness="0"
+                                Foreground="#48488A" FontSize="11"
+                                Cursor="Hand" Padding="0" VerticalAlignment="Center">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <TextBlock Text="{TemplateBinding Content}"
+                                               Foreground="{TemplateBinding Foreground}"
+                                               FontSize="{TemplateBinding FontSize}"
+                                               x:Name="Lbl"/>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Lbl" Property="TextDecorations" Value="Underline"/>
+                                            <Setter TargetName="Lbl" Property="Foreground" Value="#6060B8"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </StackPanel>
 
                 </StackPanel>
             </ScrollViewer>

@@ -123,59 +123,126 @@
             </Border>
 
             <!-- Action buttons -->
-            <StackPanel Grid.Row="3" Orientation="Horizontal"
-                        HorizontalAlignment="Right"
-                        x:Name="ButtonPanel" Visibility="Collapsed">
-                <Button x:Name="CopyButton"
-                        Content="Copy"
-                        Click="CopyButton_Click"
-                        FontSize="13" FontWeight="Medium"
-                        Padding="18,8" Background="#222234"
-                        Foreground="#B0B0D0" BorderThickness="0"
-                        Cursor="Hand" Margin="0,0,8,0">
-                    <Button.Template>
-                        <ControlTemplate TargetType="Button">
-                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                                    CornerRadius="8" Padding="{TemplateBinding Padding}">
-                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="Bd" Property="Background" Value="#2E2E48"/>
-                                </Trigger>
-                                <Trigger Property="IsPressed" Value="True">
-                                    <Setter TargetName="Bd" Property="Background" Value="#383858"/>
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Button.Template>
-                </Button>
+            <Grid Grid.Row="3" x:Name="ButtonPanel" Visibility="Collapsed">
 
-                <Button x:Name="ReplaceButton"
-                        Content="Replace"
-                        Click="ReplaceButton_Click"
-                        FontSize="13" FontWeight="Medium"
-                        Padding="18,8" Background="#5A4AF7"
-                        Foreground="White" BorderThickness="0"
-                        Cursor="Hand">
-                    <Button.Template>
-                        <ControlTemplate TargetType="Button">
-                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                                    CornerRadius="8" Padding="{TemplateBinding Padding}">
-                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="Bd" Property="Background" Value="#6B5AF8"/>
-                                </Trigger>
-                                <Trigger Property="IsPressed" Value="True">
-                                    <Setter TargetName="Bd" Property="Background" Value="#7C6AF9"/>
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Button.Template>
-                </Button>
-            </StackPanel>
+                <!-- Left: compact icon-only utility buttons -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+
+                    <!-- Expand to full editor -->
+                    <Button x:Name="ExpandButton"
+                            Content="⤢"
+                            Click="ExpandButton_Click"
+                            ToolTip="Open in full editor"
+                            Visibility="Collapsed"
+                            FontSize="14" Width="32" Height="32" Padding="0"
+                            BorderThickness="0" Cursor="Hand" Margin="0,0,6,0">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bd" Background="#222234" CornerRadius="8"
+                                        Width="32" Height="32">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#2E2E48"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#383858"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <Button.Foreground>
+                            <SolidColorBrush Color="#7C6AF7"/>
+                        </Button.Foreground>
+                    </Button>
+
+                    <!-- Regenerate / try again -->
+                    <Button x:Name="RegenerateButton"
+                            Content="↺"
+                            Click="RegenerateButton_Click"
+                            ToolTip="Try again"
+                            FontSize="16" Width="32" Height="32" Padding="0"
+                            BorderThickness="0" Cursor="Hand">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bd" Background="#222234" CornerRadius="8"
+                                        Width="32" Height="32">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#2E2E48"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#383858"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <Button.Foreground>
+                            <SolidColorBrush Color="#9090B8"/>
+                        </Button.Foreground>
+                    </Button>
+                </StackPanel>
+
+                <!-- Right: primary action buttons -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button x:Name="CopyButton"
+                            Content="Copy"
+                            Click="CopyButton_Click"
+                            FontSize="13" FontWeight="Medium"
+                            Padding="18,8" BorderThickness="0"
+                            Cursor="Hand" Margin="0,0,8,0">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bd" Background="#222234" CornerRadius="8"
+                                        Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#2E2E48"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#383858"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <Button.Foreground>
+                            <SolidColorBrush Color="#B0B0D0"/>
+                        </Button.Foreground>
+                    </Button>
+
+                    <Button x:Name="ReplaceButton"
+                            Content="Replace"
+                            Click="ReplaceButton_Click"
+                            FontSize="13" FontWeight="Medium"
+                            Padding="18,8" BorderThickness="0"
+                            Cursor="Hand">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bd" Background="#5A4AF7" CornerRadius="8"
+                                        Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#6B5AF8"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#7C6AF9"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <Button.Foreground>
+                            <SolidColorBrush Color="White"/>
+                        </Button.Foreground>
+                    </Button>
+                </StackPanel>
+            </Grid>
         </Grid>
     </Border>
 </Window>

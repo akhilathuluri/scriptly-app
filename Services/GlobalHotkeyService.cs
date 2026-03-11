@@ -1,89 +1,179 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
-using System.Windows.Interop;
+using System.Windows.Threading;
 
 namespace Scriptly.Services;
 
 /// <summary>
-/// Registers a system-wide hotkey and fires an event when it is pressed.
+/// Detects a system-wide hotkey using a Low-Level Keyboard Hook (WH_KEYBOARD_LL).
+/// Works universally in Electron apps (VS Code, Telegram, Notion),
+/// Chromium browsers (Chrome, Edge), and every other application.
+///
+/// Critical design rules for WH_KEYBOARD_LL:
+///  1. The callback MUST return within the LowLevelHooksTimeout (default 300 ms).
+///     Heavy work (clipboard, WPF calls) is dispatched asynchronously so the hook
+///     returns (IntPtr)1 immediately.
+///  2. GetAsyncKeyState is used instead of GetKeyState for reliable real-time
+///     modifier state inside the hook callback.
+///  3. GetModuleHandle(null) returns the current exe handle — most reliable in .NET.
 /// </summary>
 public class GlobalHotkeyService : IDisposable
 {
-    private const int WM_HOTKEY = 0x0312;
-    private const int HOTKEY_ID = 0xA100;
+    // ── P/Invoke ─────────────────────────────────────────────────────────────
 
     [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+    private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
 
     [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+    private static extern bool UnhookWindowsHookEx(IntPtr hhk);
 
-    // Modifier flags
-    private const uint MOD_NONE    = 0x0000;
-    private const uint MOD_ALT     = 0x0001;
-    private const uint MOD_CONTROL = 0x0002;
-    private const uint MOD_SHIFT   = 0x0004;
-    private const uint MOD_WIN     = 0x0008;
-    private const uint MOD_NOREPEAT = 0x4000;
+    [DllImport("user32.dll")]
+    private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr GetModuleHandle(string? lpModuleName); // null → current exe
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
+
+    private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct KBDLLHOOKSTRUCT
+    {
+        public uint vkCode;
+        public uint scanCode;
+        public uint flags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    // ── Constants ────────────────────────────────────────────────────────────
+
+    private const int WH_KEYBOARD_LL = 13;
+    private const int WM_KEYDOWN     = 0x0100;
+    private const int WM_KEYUP       = 0x0101;
+    private const int WM_SYSKEYDOWN  = 0x0104;
+    private const int WM_SYSKEYUP    = 0x0105;
+
+    private const int VK_CONTROL = 0x11;
+    private const int VK_SHIFT   = 0x10;
+    private const int VK_ALT     = 0x12;
+    private const int VK_LWIN    = 0x5B;
+    private const int VK_RWIN    = 0x5C;
+
+    // Set in KBDLLHOOKSTRUCT.flags when injected by SendInput — skip our own events
+    private const uint LLKHF_INJECTED = 0x10;
+
+    // ── State ────────────────────────────────────────────────────────────────
 
     public event Action? HotkeyPressed;
 
-    private HwndSource? _source;
-    private IntPtr _hwnd = IntPtr.Zero;
-    private bool _registered = false;
+    private LowLevelKeyboardProc? _hookProc;  // field keeps delegate alive (prevents GC)
+    private IntPtr _hookHandle = IntPtr.Zero;
+    private uint   _targetVk;
+    private bool   _needCtrl, _needShift, _needAlt, _needWin;
+    private bool   _hotkeyDown;
 
-    public void Initialize(Window helperWindow)
-    {
-        _hwnd = new WindowInteropHelper(helperWindow).EnsureHandle();
-        _source = HwndSource.FromHwnd(_hwnd);
-        _source?.AddHook(WndProc);
-    }
+    // ── Public API ───────────────────────────────────────────────────────────
+
+    public void Initialize(Window helperWindow) { }  // kept for API compat — no longer needed
 
     public bool Register(string modifiers, string key)
     {
-        if (_hwnd == IntPtr.Zero) return false;
-
-        if (_registered)
-            UnregisterHotKey(_hwnd, HOTKEY_ID);
-
-        uint mods = MOD_NOREPEAT;
-        var parts = modifiers.Split('+', StringSplitOptions.RemoveEmptyEntries);
-        foreach (var part in parts)
+        if (_hookHandle != IntPtr.Zero)
         {
-            mods |= part.Trim().ToLower() switch
+            UnhookWindowsHookEx(_hookHandle);
+            _hookHandle = IntPtr.Zero;
+        }
+
+        _needCtrl = _needShift = _needAlt = _needWin = false;
+        foreach (var part in modifiers.Split('+', StringSplitOptions.RemoveEmptyEntries))
+        {
+            switch (part.Trim().ToLowerInvariant())
             {
-                "ctrl" or "control" => MOD_CONTROL,
-                "shift" => MOD_SHIFT,
-                "alt" => MOD_ALT,
-                "win" => MOD_WIN,
-                _ => 0
-            };
+                case "ctrl": case "control": _needCtrl  = true; break;
+                case "shift":                _needShift = true; break;
+                case "alt":                  _needAlt   = true; break;
+                case "win":                  _needWin   = true; break;
+            }
         }
 
         if (!Enum.TryParse<Key>(key.Trim(), true, out var wpfKey))
             return false;
 
-        var vk = (uint)KeyInterop.VirtualKeyFromKey(wpfKey);
-        _registered = RegisterHotKey(_hwnd, HOTKEY_ID, mods, vk);
-        return _registered;
+        _targetVk   = (uint)KeyInterop.VirtualKeyFromKey(wpfKey);
+        _hotkeyDown = false;
+
+        _hookProc   = HookCallback;
+        // dwThreadId = 0 → system-wide; GetModuleHandle(null) = current exe module
+        _hookHandle = SetWindowsHookEx(WH_KEYBOARD_LL, _hookProc, GetModuleHandle(null), 0);
+        return _hookHandle != IntPtr.Zero;
     }
 
-    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    // ── Hook Callback ────────────────────────────────────────────────────────
+    // MUST return as fast as possible — never do clipboard or WPF work here.
+
+    private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID)
+        if (nCode < 0)
+            return CallNextHookEx(_hookHandle, nCode, wParam, lParam);
+
+        var kb = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
+
+        // Skip events injected by our own SendInput (Ctrl+C / Ctrl+V in TextCaptureService)
+        if ((kb.flags & LLKHF_INJECTED) != 0)
+            return CallNextHookEx(_hookHandle, nCode, wParam, lParam);
+
+        if (kb.vkCode != _targetVk)
+            return CallNextHookEx(_hookHandle, nCode, wParam, lParam);
+
+        bool isDown = wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN;
+        bool isUp   = wParam == (IntPtr)WM_KEYUP   || wParam == (IntPtr)WM_SYSKEYUP;
+
+        if (isDown)
         {
-            HotkeyPressed?.Invoke();
-            handled = true;
+            // GetAsyncKeyState gives real-time physical key state — more reliable
+            // than GetKeyState inside an LL hook callback.
+            bool modMatch =
+                (GetAsyncKeyState(VK_CONTROL) < 0) == _needCtrl &&
+                (GetAsyncKeyState(VK_SHIFT)   < 0) == _needShift &&
+                (GetAsyncKeyState(VK_ALT)     < 0) == _needAlt &&
+                ((GetAsyncKeyState(VK_LWIN) < 0) || (GetAsyncKeyState(VK_RWIN) < 0)) == _needWin;
+
+            if (modMatch)
+            {
+                if (!_hotkeyDown)  // only on first press, not auto-repeat
+                {
+                    _hotkeyDown = true;
+                    // BeginInvoke: the hook returns (IntPtr)1 IMMEDIATELY.
+                    // All capture work runs on the dispatcher after the hook chain resolves.
+                    Application.Current?.Dispatcher.BeginInvoke(
+                        DispatcherPriority.Input,
+                        new Action(() => HotkeyPressed?.Invoke()));
+                }
+                return (IntPtr)1;   // swallow keydown (including auto-repeat)
+            }
         }
-        return IntPtr.Zero;
+        else if (isUp && _hotkeyDown)
+        {
+            _hotkeyDown = false;
+            return (IntPtr)1;       // swallow matching keyup
+        }
+
+        return CallNextHookEx(_hookHandle, nCode, wParam, lParam);
     }
+
+    // ── Cleanup ──────────────────────────────────────────────────────────────
 
     public void Dispose()
     {
-        if (_registered && _hwnd != IntPtr.Zero)
-            UnregisterHotKey(_hwnd, HOTKEY_ID);
-        _source?.RemoveHook(WndProc);
-        _source?.Dispose();
+        if (_hookHandle != IntPtr.Zero)
+        {
+            UnhookWindowsHookEx(_hookHandle);
+            _hookHandle = IntPtr.Zero;
+        }
+        GC.SuppressFinalize(this);
     }
 }

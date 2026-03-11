@@ -13,6 +13,7 @@ public class TrayService : IDisposable
     private ContextMenuStrip? _contextMenu;
 
     public event Action? OpenSettingsRequested;
+    public event Action? OpenHistoryRequested;
     public event Action? ExitRequested;
 
     public void Initialize()
@@ -30,6 +31,10 @@ public class TrayService : IDisposable
         };
         _contextMenu.Items.Add(titleItem);
         _contextMenu.Items.Add(new ToolStripSeparator());
+
+        var historyItem = new ToolStripMenuItem("📋  History");
+        historyItem.Click += (_, _) => OpenHistoryRequested?.Invoke();
+        _contextMenu.Items.Add(historyItem);
 
         var settingsItem = new ToolStripMenuItem("⚙  Settings");
         settingsItem.Click += (_, _) => OpenSettingsRequested?.Invoke();

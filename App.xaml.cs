@@ -12,12 +12,15 @@ public partial class App : Application
     private SettingsService? _settingsService;
     private ActionsService? _actionsService;
     private AiService? _aiService;
+    private HistoryService? _historyService;
 
     // Hidden message-only window to receive hotkey messages
     private HotkeyWindow? _hotkeyWindow;
 
     // Pre-created windows (hidden until needed)
     private ActionPanelWindow? _actionPanel;
+    private ResultWindow? _resultWindow;
+    private HistoryWindow? _historyWindow;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -41,10 +44,12 @@ public partial class App : Application
         _actionsService = new ActionsService(_settingsService);
         _aiService = new AiService(_settingsService);
         _textCapture = new TextCaptureService();
+        _historyService = new HistoryService();
 
         // Tray
         _trayService = new TrayService();
         _trayService.OpenSettingsRequested += OpenSettings;
+        _trayService.OpenHistoryRequested  += OpenHistory;
         _trayService.ExitRequested += () => Shutdown();
         _trayService.Initialize();
 
@@ -61,8 +66,19 @@ public partial class App : Application
         var settings = _settingsService.Load();
         bool registered = _hotkeyService.Register(settings.HotkeyModifiers, settings.HotkeyKey);
 
-        // Pre-create action panel
-        _actionPanel = new ActionPanelWindow(_actionsService, _aiService, _textCapture, _settingsService);
+        if (!registered)
+            _trayService.ShowBalloon("Scriptly — Hotkey conflict",
+                $"Could not register {settings.HotkeyModifiers}+{settings.HotkeyKey}. " +
+                "Another app may be using it. Open Settings to choose a different shortcut.",
+                System.Windows.Forms.ToolTipIcon.Warning);
+
+        // Apply startup-on-login preference
+        StartupService.Apply(settings.StartWithWindows);
+
+        // Pre-create windows (hidden) — reused on every hotkey press
+        _resultWindow = new ResultWindow(_aiService, _textCapture, _settingsService, _historyService!);
+        _actionPanel  = new ActionPanelWindow(_actionsService, _aiService, _textCapture, _settingsService, _resultWindow);
+        _historyWindow = new HistoryWindow(_historyService!);
 
         // Show balloon on first start or if no API key set
         if (string.IsNullOrWhiteSpace(settings.OpenRouter.ApiKey) && string.IsNullOrWhiteSpace(settings.Groq.ApiKey))
@@ -103,8 +119,16 @@ public partial class App : Application
         {
             var win = new SettingsWindow(_settingsService!, settings =>
             {
-                // Re-register hotkey on save
-                _hotkeyService?.Register(settings.HotkeyModifiers, settings.HotkeyKey);
+                // Invalidate cached actions so new custom actions are picked up immediately
+                _actionsService?.InvalidateCache();
+
+                // Re-register hotkey on save; warn if the new combo is already taken
+                bool ok = _hotkeyService?.Register(settings.HotkeyModifiers, settings.HotkeyKey) ?? false;
+                if (!ok)
+                    _trayService?.ShowBalloon("Scriptly — Hotkey conflict",
+                        $"Could not register {settings.HotkeyModifiers}+{settings.HotkeyKey}. " +
+                        "Another app may be using it. Try a different shortcut.",
+                        System.Windows.Forms.ToolTipIcon.Warning);
             });
             win.Show();
             win.Activate();
@@ -116,6 +140,19 @@ public partial class App : Application
         _hotkeyService?.Dispose();
         _trayService?.Dispose();
         base.OnExit(e);
+    }
+
+    private void OpenHistory()
+    {
+        Dispatcher.Invoke(() =>
+        {
+            if (_historyWindow!.IsVisible)
+            {
+                _historyWindow.Activate();
+                return;
+            }
+            _historyWindow.ShowPanel();
+        });
     }
 }
 

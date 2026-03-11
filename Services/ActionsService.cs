@@ -5,9 +5,15 @@ namespace Scriptly.Services;
 public class ActionsService
 {
     private readonly SettingsService _settingsService;
+    private AppSettings? _settingsCache;
+
+    // Called by App.xaml.cs after the user saves settings, so the next
+    // hotkey press picks up any newly-added custom actions.
+    public void InvalidateCache() => _settingsCache = null;
 
     private static readonly List<ActionItem> _builtInActions = new()
     {
+        new ActionItem { Id = "ask_ai",        Name = "Ask AI",          Icon = "💬",  Shortcut = "Q", Description = "Ask anything — type your own question",        IsBuiltIn = true, Prompt = null },
         new ActionItem { Id = "fix_grammar",   Name = "Fix Grammar",     Icon = "✏️",  Shortcut = "G", Description = "Fix spelling and grammar mistakes",           IsBuiltIn = true, Prompt = "Fix the grammar and spelling of the following text. Return only the corrected text without any explanation:\n\n{text}" },
         new ActionItem { Id = "summarize",     Name = "Summarize",       Icon = "≡",   Shortcut = "S", Description = "Create a concise summary",                    IsBuiltIn = true, Prompt = "Summarize the following text concisely. Return only the summary:\n\n{text}" },
         new ActionItem { Id = "translate",     Name = "Translate",       Icon = "×",   Shortcut = "T", Description = "Translate to English or detect language",     IsBuiltIn = true, Prompt = "Translate the following text to English (if already English, translate to Spanish). Return only the translated text:\n\n{text}" },
@@ -29,10 +35,10 @@ public class ActionsService
 
     public List<ActionItem> GetAllActions()
     {
-        var settings = _settingsService.Load();
+        _settingsCache ??= _settingsService.Load();
         var all = new List<ActionItem>(_builtInActions);
 
-        foreach (var custom in settings.CustomActions)
+        foreach (var custom in _settingsCache.CustomActions)
         {
             all.Add(new ActionItem
             {

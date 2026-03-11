@@ -29,8 +29,10 @@ public partial class ActionPanelWindow : Window
     private readonly AiService _aiService;
     private readonly TextCaptureService _textCapture;
     private readonly SettingsService _settingsService;
+    private readonly ResultWindow _resultWindow;
     private List<ActionItem> _allActions = new();
     private string _selectedText = string.Empty;
+    private System.Windows.Point _cursorPos;
 
     // Guard: prevents Deactivated from closing right as the window appears
     private bool _allowDeactivateClose = false;
@@ -39,12 +41,14 @@ public partial class ActionPanelWindow : Window
         ActionsService actionsService,
         AiService aiService,
         TextCaptureService textCapture,
-        SettingsService settingsService)
+        SettingsService settingsService,
+        ResultWindow resultWindow)
     {
         _actionsService = actionsService;
         _aiService = aiService;
         _textCapture = textCapture;
         _settingsService = settingsService;
+        _resultWindow = resultWindow;
 
         InitializeComponent();
 
@@ -58,7 +62,8 @@ public partial class ActionPanelWindow : Window
     public void ShowWithText(string selectedText, System.Windows.Point cursorPos)
     {
         _selectedText = selectedText;
-        _allActions = _actionsService.GetSmartSuggestions(selectedText);
+        _cursorPos    = cursorPos;
+        _allActions   = _actionsService.GetSmartSuggestions(selectedText);
 
         var settings = _settingsService.Load();
         ProviderLabel.Text = settings.ActiveProvider;
@@ -187,6 +192,23 @@ public partial class ActionPanelWindow : Window
     private void ExecuteSelected()
     {
         if (ActionsList.SelectedItem is not ActionItem action) return;
+
+        // "Ask AI" opens a custom-prompt input window instead of going straight to results
+        if (action.Id == "ask_ai")
+        {
+            var selectedText = _selectedText;
+            var cursorPos    = _cursorPos;
+            AnimateClose(onComplete: () =>
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    var askWindow = new AskWindow(_aiService, _textCapture, _settingsService, _resultWindow);
+                    askWindow.ShowWithText(selectedText, cursorPos);
+                }));
+            });
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(action.Prompt)) return;
 
         AnimateClose(onComplete: () =>
@@ -194,8 +216,7 @@ public partial class ActionPanelWindow : Window
             // Defer to next dispatcher frame so we're fully outside the animation callback
             Dispatcher.BeginInvoke(new Action(() =>
             {
-                var resultWindow = new ResultWindow(_aiService, _textCapture, _settingsService);
-                resultWindow.ShowWithProcessing(action, _selectedText);
+                _resultWindow.ShowWithProcessing(action, _selectedText);
             }));
         });
     }
