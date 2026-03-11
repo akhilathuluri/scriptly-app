@@ -14,8 +14,16 @@ public class AiService
     public AiService(SettingsService settingsService)
     {
         _settingsService = settingsService;
-        _httpClient = new HttpClient();
-        _httpClient.Timeout = TimeSpan.FromSeconds(60);
+        _httpClient = new HttpClient(new System.Net.Http.SocketsHttpHandler
+        {
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+            EnableMultipleHttp2Connections = true,
+        })
+        {
+            Timeout = TimeSpan.FromSeconds(60),
+            DefaultRequestVersion = new Version(2, 0),
+            DefaultVersionPolicy = System.Net.Http.HttpVersionPolicy.RequestVersionOrLower
+        };
     }
 
     public async Task<string> ProcessAsync(string prompt, string selectedText, CancellationToken ct = default)
@@ -42,7 +50,7 @@ public class AiService
         {
             model = config.Model,
             messages = new[] { new { role = "user", content = prompt } },
-            max_tokens = 4096
+            max_tokens = 2048
         };
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "https://openrouter.ai/api/v1/chat/completions");
@@ -83,7 +91,7 @@ public class AiService
         {
             model = config.Model,
             messages = new[] { new { role = "user", content = prompt } },
-            max_tokens = 4096
+            max_tokens = 2048
         };
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.groq.com/openai/v1/chat/completions");
@@ -147,7 +155,7 @@ public class AiService
         {
             model    = config.Model,
             messages = new[] { new { role = "user", content = prompt } },
-            max_tokens = 4096,
+            max_tokens = 2048,
             stream   = true
         };
 
@@ -218,7 +226,7 @@ public class AiService
         {
             model    = config.Model,
             messages = new[] { new { role = "user", content = prompt } },
-            max_tokens = 4096,
+            max_tokens = 2048,
             stream   = true
         };
 

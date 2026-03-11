@@ -113,7 +113,7 @@ public partial class ResultWindow : Window
             await foreach (var token in _aiService.StreamAsync(action.Prompt!, selectedText, _cts.Token))
             {
                 var t = token;
-                Dispatcher.Invoke(() =>
+                _ = Dispatcher.BeginInvoke(() =>
                 {
                     // On the very first token: swap thinking panel → result panel
                     if (firstToken)
