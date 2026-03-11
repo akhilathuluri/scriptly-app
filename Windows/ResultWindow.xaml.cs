@@ -1,5 +1,7 @@
 using System.Windows;
+using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Media.Animation;
 using Scriptly.Models;
 using Scriptly.Services;
@@ -18,6 +20,17 @@ public partial class ResultWindow : Window
     // Remembered for Regenerate and FullEditor
     private ActionItem? _currentAction;
     private string _currentSelectedText = string.Empty;
+
+    // Diff state
+    private bool _isDiffAction;
+    private bool _showingDiff;
+
+    // Action IDs where a before/after diff is meaningful
+    private static readonly HashSet<string> DiffEligibleActions = new()
+    {
+        "fix_grammar", "rewrite", "improve",
+        "change_tone", "casual_tone", "shorten", "expand"
+    };
 
     public ResultWindow(
         AiService aiService,
@@ -49,10 +62,19 @@ public partial class ResultWindow : Window
         ThinkingPanel.Visibility  = Visibility.Visible;
         ResultPanel.Visibility    = Visibility.Collapsed;
         ErrorPanel.Visibility     = Visibility.Collapsed;
+        DiffPanel.Visibility      = Visibility.Collapsed;
         ButtonPanel.Visibility    = Visibility.Collapsed;
         ExpandButton.Visibility   = Visibility.Collapsed;
+        DiffToggleButton.Visibility = Visibility.Collapsed;
         ResultText.Text           = string.Empty;
         ErrorText.Text            = string.Empty;
+
+        // Reset diff state
+        _showingDiff    = false;
+        _isDiffAction   = DiffEligibleActions.Contains(action.Id);
+        DiffToggleButton.Content  = "Changes";
+        DiffToggleButton.ToolTip  = "Show changes from original";
+        DiffText.Document = new FlowDocument();
 
         // Clear animation holds from previous close so XAML base values restore:
         //   RootBorder.Opacity → 0, ScaleT → 0.94, TranslateT.Y → -10
@@ -130,6 +152,13 @@ public partial class ResultWindow : Window
                         SelectedText = _currentSelectedText,
                         Result       = _resultText
                     });
+
+                    // Build diff for text-transform actions
+                    if (_isDiffAction)
+                    {
+                        RenderDiff(_currentSelectedText, _resultText);
+                        DiffToggleButton.Visibility = Visibility.Visible;
+                    }
                 }
             });
         }
@@ -179,6 +208,92 @@ public partial class ResultWindow : Window
     {
         if (_currentAction != null)
             ShowWithProcessing(_currentAction, _currentSelectedText);
+    }
+
+    private void DiffToggleButton_Click(object sender, RoutedEventArgs e)
+    {
+        _showingDiff = !_showingDiff;
+
+        if (_showingDiff)
+        {
+            ResultPanel.Visibility          = Visibility.Collapsed;
+            DiffPanel.Visibility            = Visibility.Visible;
+            DiffToggleButton.Content        = "Result";
+            DiffToggleButton.ToolTip        = "Show AI result";
+            AnimatePanelIn(DiffPanel);
+        }
+        else
+        {
+            DiffPanel.Visibility            = Visibility.Collapsed;
+            ResultPanel.Visibility          = Visibility.Visible;
+            DiffToggleButton.Content        = "Changes";
+            DiffToggleButton.ToolTip        = "Show changes from original";
+            AnimatePanelIn(ResultPanel);
+        }
+    }
+
+    private void AnimatePanelIn(UIElement panel)
+    {
+        var dur  = new Duration(TimeSpan.FromMilliseconds(160));
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        panel.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(0, 1, dur) { EasingFunction = ease });
+    }
+
+    // ── Diff rendering ───────────────────────────────────────────────────────
+
+    private static readonly SolidColorBrush DeleteFg =
+        new(System.Windows.Media.Color.FromRgb(0xFF, 0x6B, 0x6B));   // warm red
+    private static readonly SolidColorBrush InsertFg =
+        new(System.Windows.Media.Color.FromRgb(0x7E, 0xC8, 0x8B));   // muted green
+    private static readonly SolidColorBrush EqualFg  =
+        new(System.Windows.Media.Color.FromRgb(0x88, 0x88, 0xA8));   // muted purple-gray
+    private static readonly SolidColorBrush DeleteBg =
+        new(System.Windows.Media.Color.FromArgb(0x28, 0xFF, 0x40, 0x40));
+    private static readonly SolidColorBrush InsertBg =
+        new(System.Windows.Media.Color.FromArgb(0x28, 0x40, 0xFF, 0x60));
+
+    private void RenderDiff(string original, string result)
+    {
+        var chunks = DiffService.Compute(original, result);
+
+        var para = new Paragraph
+        {
+            Margin       = new Thickness(0),
+            Padding      = new Thickness(0),
+            TextAlignment = TextAlignment.Left,
+            FontFamily   = ResultText.FontFamily,
+            FontSize     = ResultText.FontSize
+        };
+
+        foreach (var chunk in chunks)
+        {
+            var run = new Run(chunk.Text);
+            switch (chunk.Type)
+            {
+                case DiffType.Delete:
+                    run.Foreground     = DeleteFg;
+                    run.Background     = DeleteBg;
+                    run.TextDecorations = TextDecorations.Strikethrough;
+                    break;
+                case DiffType.Insert:
+                    run.Foreground = InsertFg;
+                    run.Background = InsertBg;
+                    break;
+                default: // Equal
+                    run.Foreground = EqualFg;
+                    break;
+            }
+            para.Inlines.Add(run);
+        }
+
+        var doc = new FlowDocument(para)
+        {
+            PagePadding = new Thickness(0),
+            Background  = System.Windows.Media.Brushes.Transparent
+        };
+
+        DiffText.Document = doc;
     }
 
     private void ExpandButton_Click(object sender, RoutedEventArgs e)
