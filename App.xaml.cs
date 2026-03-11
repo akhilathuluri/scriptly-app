@@ -103,20 +103,24 @@ public partial class App : Application
     {
         if (_textCapture == null || _actionPanel == null) return;
 
-        var cursorPos = _textCapture.GetCursorPosition();
-        var selectedText = await _textCapture.GetSelectedTextAsync();
-
-        if (string.IsNullOrWhiteSpace(selectedText)) return;
-
-        Dispatcher.Invoke(() =>
+        try
         {
-            if (_actionPanel.IsVisible)
+            var cursorPos = _textCapture.GetCursorPosition();
+            var selectedText = await _textCapture.GetSelectedTextAsync();
+
+            if (string.IsNullOrWhiteSpace(selectedText)) return;
+
+            Dispatcher.Invoke(() =>
             {
-                _actionPanel.Hide();
-                return;
-            }
-            _actionPanel.ShowWithText(selectedText, cursorPos);
-        });
+                if (_actionPanel.IsVisible)
+                {
+                    _actionPanel.Hide();
+                    return;
+                }
+                _actionPanel.ShowWithText(selectedText, cursorPos);
+            });
+        }
+        catch { /* clipboard or focus errors — silently skip this hotkey press */ }
     }
 
     private void OpenSettings()

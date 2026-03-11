@@ -222,8 +222,12 @@ public partial class ResultWindow : Window
         var text = _resultText;
         AnimateClose(onComplete: async () =>
         {
-            await Task.Delay(150); // allow window to fully close & source app to regain focus
-            await _textCapture.ReplaceSelectedTextAsync(text);
+            try
+            {
+                await Task.Delay(150); // allow window to fully close & source app to regain focus
+                await _textCapture.ReplaceSelectedTextAsync(text);
+            }
+            catch { /* clipboard or focus errors — replacement already attempted, ignore */ }
         });
     }
 

@@ -65,13 +65,12 @@ public partial class HistoryWindow : Window
         {
             Clipboard.SetText(entry.Result);
 
-            var prev = FooterHint.Text;
             FooterHint.Text = "✓ Copied to clipboard";
             var timer = new System.Windows.Threading.DispatcherTimer
             {
                 Interval = TimeSpan.FromSeconds(2)
             };
-            timer.Tick += (_, _) => { FooterHint.Text = prev; timer.Stop(); };
+            timer.Tick += (_, _) => { FooterHint.Text = "Click Copy on any entry to copy the result"; timer.Stop(); };
             timer.Start();
         }
     }

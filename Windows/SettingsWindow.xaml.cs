@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media.Animation;
 using Scriptly.Models;
 using Scriptly.Services;
 
@@ -137,5 +138,26 @@ public partial class SettingsWindow : Window
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
             "https://github.com/scriptly-app/scriptly/releases")
             { UseShellExecute = true });
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape) { Close(); e.Handled = true; }
+        base.OnKeyDown(e);
+    }
+
+    protected override void OnContentRendered(EventArgs e)
+    {
+        base.OnContentRendered(e);
+
+        var dur  = new Duration(TimeSpan.FromMilliseconds(200));
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+        RootBorder.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(0, 1, dur) { EasingFunction = ease });
+
+        var scaleAnim = new DoubleAnimation(0.96, 1.0, dur) { EasingFunction = ease };
+        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleAnim);
+        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleAnim);
     }
 }
