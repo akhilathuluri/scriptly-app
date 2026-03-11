@@ -25,6 +25,9 @@ public partial class ResultWindow : Window
     private bool _isDiffAction;
     private bool _showingDiff;
 
+    // Developer analytics
+    private readonly AnalyticsService _analyticsService;
+
     // Action IDs where a before/after diff is meaningful
     private static readonly HashSet<string> DiffEligibleActions = new()
     {
@@ -36,12 +39,14 @@ public partial class ResultWindow : Window
         AiService aiService,
         TextCaptureService textCapture,
         SettingsService settingsService,
-        HistoryService historyService)
+        HistoryService historyService,
+        AnalyticsService analyticsService)
     {
         _aiService = aiService;
         _textCapture = textCapture;
         _settingsService = settingsService;
         _historyService = historyService;
+        _analyticsService = analyticsService;
 
         InitializeComponent();
     }
@@ -110,10 +115,20 @@ public partial class ResultWindow : Window
         _cts = new CancellationTokenSource();
         bool firstToken = true;
 
+        // Analytics: load provider info and start timer before any await
+        var sw         = System.Diagnostics.Stopwatch.StartNew();
+        int chunkCount = 0, resultLength = 0;
+        var cfg        = _settingsService.Load();
+        var provider   = cfg.ActiveProvider;
+        var model      = provider == "Groq" ? cfg.Groq.Model : cfg.OpenRouter.Model;
+        _analyticsService.TrackActionStarted(action.Id, action.Name, action.IsBuiltIn, provider, model);
+
         try
         {
             await foreach (var token in _aiService.StreamAsync(action.Prompt!, selectedText, _cts.Token))
             {
+                chunkCount++;
+                resultLength += token.Length;
                 var t = token;
                 _ = Dispatcher.BeginInvoke(() =>
                 {
@@ -163,6 +178,11 @@ public partial class ResultWindow : Window
                     }
                 }
             });
+
+            // Track completion — chunkCount is set synchronously in the foreach, always reliable
+            if (chunkCount > 0)
+                _analyticsService.TrackActionCompleted(
+                    action.Id, action.IsBuiltIn, chunkCount, resultLength, sw.ElapsedMilliseconds, provider);
         }
         catch (OperationCanceledException)
         {
@@ -170,6 +190,7 @@ public partial class ResultWindow : Window
         }
         catch (Exception ex)
         {
+            _analyticsService.TrackActionError(action.Id, action.IsBuiltIn, ex.GetType().Name, provider);
             Dispatcher.Invoke(() =>
             {
                 ThinkingPanel.Visibility = Visibility.Collapsed;

@@ -13,6 +13,7 @@ public partial class App : Application
     private ActionsService? _actionsService;
     private AiService? _aiService;
     private HistoryService? _historyService;
+    private AnalyticsService? _analyticsService;
     private System.Threading.Mutex? _mutex; // kept alive for the process lifetime
 
     // Hidden message-only window to receive hotkey messages
@@ -47,6 +48,10 @@ public partial class App : Application
         _textCapture = new TextCaptureService();
         _historyService = new HistoryService();
 
+        // Analytics — developer-only, silently disabled if API key is not set
+        _analyticsService = new AnalyticsService();
+        _analyticsService.TrackAppStarted();
+
         // Tray
         _trayService = new TrayService();
         _trayService.OpenSettingsRequested += OpenSettings;
@@ -77,7 +82,7 @@ public partial class App : Application
         StartupService.Apply(settings.StartWithWindows);
 
         // Pre-create windows (hidden) — reused on every hotkey press
-        _resultWindow = new ResultWindow(_aiService, _textCapture, _settingsService, _historyService!);
+        _resultWindow = new ResultWindow(_aiService, _textCapture, _settingsService, _historyService!, _analyticsService!);
         _actionPanel  = new ActionPanelWindow(_actionsService, _aiService, _textCapture, _settingsService, _resultWindow);
         _historyWindow = new HistoryWindow(_historyService!);
 
@@ -140,6 +145,7 @@ public partial class App : Application
     {
         _hotkeyService?.Dispose();
         _trayService?.Dispose();
+        _analyticsService?.Dispose();
         _mutex?.ReleaseMutex();
         _mutex?.Dispose();
         base.OnExit(e);
