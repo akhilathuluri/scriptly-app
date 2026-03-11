@@ -28,11 +28,11 @@ public partial class SettingsWindow : Window
         ProviderCombo.SelectedIndex = _settings.ActiveProvider == "Groq" ? 1 : 0;
 
         // OpenRouter
-        OpenRouterKeyBox.Text = _settings.OpenRouter.ApiKey;
+        OpenRouterKeyBox.Password = _settings.OpenRouter.ApiKey;
         OpenRouterModelBox.Text = _settings.OpenRouter.Model;
 
         // Groq
-        GroqKeyBox.Text = _settings.Groq.ApiKey;
+        GroqKeyBox.Password = _settings.Groq.ApiKey;
         GroqModelBox.Text = _settings.Groq.Model;
 
         // Hotkey
@@ -68,9 +68,9 @@ public partial class SettingsWindow : Window
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)
     {
-        _settings.OpenRouter.ApiKey = OpenRouterKeyBox.Text.Trim();
+        _settings.OpenRouter.ApiKey = OpenRouterKeyBox.Password.Trim();
         _settings.OpenRouter.Model = OpenRouterModelBox.Text.Trim();
-        _settings.Groq.ApiKey = GroqKeyBox.Text.Trim();
+        _settings.Groq.ApiKey = GroqKeyBox.Password.Trim();
         _settings.Groq.Model = GroqModelBox.Text.Trim();
         _settings.HotkeyModifiers = HotkeyModifiers.Text.Trim();
         _settings.HotkeyKey = HotkeyKey.Text.Trim();

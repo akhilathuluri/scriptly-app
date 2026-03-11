@@ -84,7 +84,9 @@ public partial class FullEditorWindow : Window
     {
         var text = ResultTextBox.Text;
         Close();
-        _ = Task.Run(async () =>
+        // Dispatcher.BeginInvoke runs on the STA UI thread — required for Clipboard.SetText.
+        // Task.Run uses MTA thread-pool threads which cause ThreadStateException on clipboard calls.
+        _ = Application.Current.Dispatcher.BeginInvoke(async () =>
         {
             await Task.Delay(150); // let window fully close before injecting keystrokes
             await _textCapture.ReplaceSelectedTextAsync(text);

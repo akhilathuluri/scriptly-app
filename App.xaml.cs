@@ -13,6 +13,7 @@ public partial class App : Application
     private ActionsService? _actionsService;
     private AiService? _aiService;
     private HistoryService? _historyService;
+    private System.Threading.Mutex? _mutex; // kept alive for the process lifetime
 
     // Hidden message-only window to receive hotkey messages
     private HotkeyWindow? _hotkeyWindow;
@@ -26,8 +27,8 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
-        // Enforce single instance
-        var mutex = new System.Threading.Mutex(true, "Scriptly_SingleInstance", out bool created);
+        // Enforce single instance — stored as a field so GC never collects it while the app runs
+        _mutex = new System.Threading.Mutex(true, "Scriptly_SingleInstance", out bool created);
         if (!created)
         {
             MessageBox.Show("Scriptly is already running. Look for the icon in the system tray.",
@@ -139,6 +140,8 @@ public partial class App : Application
     {
         _hotkeyService?.Dispose();
         _trayService?.Dispose();
+        _mutex?.ReleaseMutex();
+        _mutex?.Dispose();
         base.OnExit(e);
     }
 

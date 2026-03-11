@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace Scriptly.Services;
@@ -80,7 +81,13 @@ public class TrayService : IDisposable
         var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
         g.DrawString("S", font, textBrush, new RectangleF(0, 0, 16, 16), sf);
 
-        return Icon.FromHandle(bmp.GetHicon());
+        // GetHicon() creates a GDI HICON that Icon.FromHandle does NOT own.
+        // Clone() produces an Icon that owns its handle; then we free the original HICON.
+        var hIcon = bmp.GetHicon();
+        var icon  = Icon.FromHandle(hIcon);
+        var owned = (Icon)icon.Clone();
+        DestroyIcon(hIcon);
+        return owned;
     }
 
     public void Dispose()
@@ -88,4 +95,7 @@ public class TrayService : IDisposable
         _notifyIcon?.Dispose();
         _contextMenu?.Dispose();
     }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool DestroyIcon(IntPtr hIcon);
 }

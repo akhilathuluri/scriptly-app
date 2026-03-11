@@ -50,8 +50,10 @@ public partial class ResultWindow : Window
 
     public void ShowWithProcessing(ActionItem action, string selectedText)
     {
-        // Cancel any in-flight request from a previous use
+        // Cancel and dispose any in-flight request from a previous use
         _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
         _resultText = string.Empty;
 
         // Remember for Regenerate / Expand
