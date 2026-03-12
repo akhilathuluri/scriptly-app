@@ -26,7 +26,10 @@ public class SettingsService
                        ?? new Models.AppSettings();
             }
         }
-        catch { /* return defaults on any error */ }
+        catch (Exception ex)
+        {
+            DebugLogService.LogError("SettingsService.Load", ex);
+        }
         return new Models.AppSettings();
     }
 
@@ -38,6 +41,9 @@ public class SettingsService
             var json = JsonSerializer.Serialize(settings, JsonOptions);
             File.WriteAllText(SettingsPath, json);
         }
-        catch { /* silently ignore save errors */ }
+        catch (Exception ex)
+        {
+            DebugLogService.LogError("SettingsService.Save", ex);
+        }
     }
 }

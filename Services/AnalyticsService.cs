@@ -10,30 +10,60 @@ namespace Scriptly.Services;
 /// Tracks action usage, streaming chunk counts, durations, and error types.
 /// No user text, no selected content, no PII is ever sent.
 ///
-/// To enable: fill in PostHogApiKey below with your PostHog project API key.
-/// Analytics are silently disabled (no-op) when the key is left empty.
+/// To enable: open appsettings.json and set posthog.enabled = true, posthog.apiKey = your key.
+/// Analytics are silently disabled (no-op) when not enabled.
 /// </summary>
 public sealed class AnalyticsService : IDisposable
 {
-    // ── Developer configuration ──────────────────────────────────────────────
-    // Replace the empty string with your PostHog project API key.
-    // This is a DEVELOPER key — never shown or accessible to end users.
-    private const string PostHogApiKey = "phc_72TNmzOIpyvoNCkf90Ks84PXcEJbLaJqwgxNUR56JAj";
-    private const string PostHogHost   = "https://eu.i.posthog.com";
-
     // ── State ────────────────────────────────────────────────────────────────
     private readonly HttpClient _http;
     private readonly string     _distinctId;   // anonymous per-installation GUID — no PII
     private readonly string     _appVersion;
     private readonly bool       _enabled;
+    private readonly string     _posthogApiKey;
+    private readonly string     _posthogHost;
 
     public AnalyticsService()
     {
-        _enabled    = !string.IsNullOrWhiteSpace(PostHogApiKey);
         _http       = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
         _distinctId = GetOrCreateDeviceId();
         _appVersion = System.Reflection.Assembly
                           .GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0";
+
+        // Load config from appsettings.json
+        (_enabled, _posthogApiKey, _posthogHost) = LoadConfig();
+    }
+
+    private static (bool enabled, string apiKey, string host) LoadConfig()
+    {
+        try
+        {
+            var appSettingsPath = Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "appsettings.json");
+
+            if (File.Exists(appSettingsPath))
+            {
+                var json = File.ReadAllText(appSettingsPath);
+                using var doc = JsonDocument.Parse(json);
+                
+                var root = doc.RootElement;
+                if (root.TryGetProperty("posthog", out var phEl))
+                {
+                    var enabled = phEl.TryGetProperty("enabled", out var enabledEl) && enabledEl.GetBoolean();
+                    var apiKey = phEl.TryGetProperty("apiKey", out var keyEl) ? keyEl.GetString() : "";
+                    var host = phEl.TryGetProperty("host", out var hostEl) ? hostEl.GetString() : "https://eu.i.posthog.com";
+                    
+                    return (enabled && !string.IsNullOrWhiteSpace(apiKey), apiKey ?? "", host ?? "https://eu.i.posthog.com");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            DebugLogService.LogError("AnalyticsService.LoadConfig", ex);
+        }
+
+        return (false, "", "https://eu.i.posthog.com");
     }
 
     // ── Public tracking methods ──────────────────────────────────────────────
@@ -106,7 +136,7 @@ public sealed class AnalyticsService : IDisposable
             {
                 var payload = new
                 {
-                    api_key     = PostHogApiKey,
+                    api_key     = _posthogApiKey,
                     @event      = eventName,
                     distinct_id = _distinctId,
                     properties,
@@ -115,7 +145,7 @@ public sealed class AnalyticsService : IDisposable
 
                 var body    = JsonSerializer.Serialize(payload);
                 var content = new StringContent(body, Encoding.UTF8, "application/json");
-                await _http.PostAsync($"{PostHogHost}/capture/", content).ConfigureAwait(false);
+                await _http.PostAsync($"{_posthogHost}/capture/", content).ConfigureAwait(false);
             }
             catch { /* analytics must never surface */ }
         });

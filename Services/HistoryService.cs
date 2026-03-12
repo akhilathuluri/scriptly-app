@@ -64,7 +64,11 @@ public class HistoryService
                 _entries = JsonSerializer.Deserialize<List<HistoryEntry>>(json, JsonOptions) ?? new();
             }
         }
-        catch { _entries = new(); }
+        catch (Exception ex)
+        {
+            DebugLogService.LogError("HistoryService.Load", ex);
+            _entries = new();
+        }
     }
 
     private void PersistAsync()
@@ -77,7 +81,28 @@ public class HistoryService
                 Directory.CreateDirectory(Path.GetDirectoryName(HistoryPath)!);
                 File.WriteAllText(HistoryPath, JsonSerializer.Serialize(snapshot, JsonOptions));
             }
-            catch { /* silently ignore write errors */ }
+            catch (Exception ex)
+            {
+                DebugLogService.LogError("HistoryService.Persist", ex);
+            }
         });
+    }
+
+    /// <summary>
+    /// Synchronously persist history to disk — call this before app shutdown.
+    /// Ensures no pending writes are lost.
+    /// </summary>
+    public void PersistSync()
+    {
+        try
+        {
+            var snapshot = _entries.ToList();
+            Directory.CreateDirectory(Path.GetDirectoryName(HistoryPath)!);
+            File.WriteAllText(HistoryPath, JsonSerializer.Serialize(snapshot, JsonOptions));
+        }
+        catch (Exception ex)
+        {
+            DebugLogService.LogError("HistoryService.PersistSync", ex);
+        }
     }
 }

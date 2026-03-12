@@ -16,6 +16,9 @@ public partial class App : Application
     private AnalyticsService? _analyticsService;
     private System.Threading.Mutex? _mutex; // kept alive for the process lifetime
 
+    // Hotkey debounce: prevent rapid repeated presses from spawning multiple windows
+    private bool _hotkeyProcessing = false;
+
     // Hidden message-only window to receive hotkey messages
     private HotkeyWindow? _hotkeyWindow;
 
@@ -101,10 +104,14 @@ public partial class App : Application
 
     private async void OnHotkeyPressed()
     {
-        if (_textCapture == null || _actionPanel == null) return;
+        // Debounce: prevent rapid repeated hotkey presses from spawning multiple windows
+        if (_hotkeyProcessing) return;
+        _hotkeyProcessing = true;
 
         try
         {
+            if (_textCapture == null || _actionPanel == null) return;
+
             var cursorPos = _textCapture.GetCursorPosition();
             var selectedText = await _textCapture.GetSelectedTextAsync();
 
@@ -120,7 +127,14 @@ public partial class App : Application
                 _actionPanel.ShowWithText(selectedText, cursorPos);
             });
         }
-        catch { /* clipboard or focus errors — silently skip this hotkey press */ }
+        catch (Exception ex)
+        {
+            DebugLogService.LogError("OnHotkeyPressed", ex);
+        }
+        finally
+        {
+            _hotkeyProcessing = false;
+        }
     }
 
     private void OpenSettings()
@@ -147,6 +161,9 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // Ensure history is persisted before exit
+        _historyService?.PersistSync();
+
         _hotkeyService?.Dispose();
         _trayService?.Dispose();
         _analyticsService?.Dispose();

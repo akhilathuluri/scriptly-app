@@ -102,9 +102,12 @@ public partial class ActionPanelWindow : Window
         x += 12;
         y += 12;
 
-        // Keep on screen
+        // Keep on screen — use ActualHeight instead of magic number
+        double estimatedHeight = 450; // approximation if ActualHeight not ready yet
+        if (ActualHeight > 0) estimatedHeight = ActualHeight;
+
         if (x + ActualWidth > screen.Right) x = screen.Right - ActualWidth - 10;
-        if (y + 450 > screen.Bottom) y = y - 450 - 20;
+        if (y + estimatedHeight > screen.Bottom) y = y - estimatedHeight - 20;
         if (x < screen.Left) x = screen.Left + 10;
         if (y < screen.Top) y = screen.Top + 10;
 

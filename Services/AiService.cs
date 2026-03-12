@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using Scriptly.Models;
+using Polly;
 
 namespace Scriptly.Services;
 
@@ -59,24 +60,49 @@ public class AiService
         request.Headers.Add("X-Title", "Scriptly");
         request.Content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
 
-        using var response = await _httpClient.SendAsync(request, ct);
+        var retryPolicy = RetryService.GetHttpRetryPolicy();
+        using var response = await retryPolicy.ExecuteAsync(() => _httpClient.SendAsync(request, ct));
         var json = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
         {
-            var errDoc = JsonDocument.Parse(json);
-            var errMsg = errDoc.RootElement.TryGetProperty("error", out var errEl)
-                ? errEl.TryGetProperty("message", out var msgEl) ? msgEl.GetString() : json
-                : json;
+            var errMsg = "Unknown error";
+            try
+            {
+                var errDoc = JsonDocument.Parse(json);
+                if (errDoc.RootElement.TryGetProperty("error", out var errEl) &&
+                    errEl.TryGetProperty("message", out var msgEl))
+                {
+                    errMsg = msgEl.GetString() ?? json;
+                }
+            }
+            catch { errMsg = json; }
             throw new HttpRequestException($"OpenRouter API error ({(int)response.StatusCode}): {errMsg}");
         }
 
-        using var doc = JsonDocument.Parse(json);
-        return doc.RootElement
-                  .GetProperty("choices")[0]
-                  .GetProperty("message")
-                  .GetProperty("content")
-                  .GetString() ?? string.Empty;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            // Null-safe navigation: check array length before indexing
+            if (!root.TryGetProperty("choices", out var choicesEl) || choicesEl.GetArrayLength() == 0)
+                return string.Empty;
+
+            var firstChoice = choicesEl[0];
+            if (!firstChoice.TryGetProperty("message", out var msgEl))
+                return string.Empty;
+
+            if (!msgEl.TryGetProperty("content", out var contentEl))
+                return string.Empty;
+
+            return contentEl.GetString() ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            DebugLogService.LogError("CallOpenRouterAsync JSON parsing", ex);
+            throw;
+        }
     }
 
     private async Task<string> CallGroqAsync(GroqSettings config, string prompt, CancellationToken ct)
@@ -98,24 +124,49 @@ public class AiService
         request.Headers.Add("Authorization", $"Bearer {config.ApiKey}");
         request.Content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
 
-        using var response = await _httpClient.SendAsync(request, ct);
+        var retryPolicy = RetryService.GetHttpRetryPolicy();
+        using var response = await retryPolicy.ExecuteAsync(() => _httpClient.SendAsync(request, ct));
         var json = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
         {
-            var errDoc = JsonDocument.Parse(json);
-            var errMsg = errDoc.RootElement.TryGetProperty("error", out var errEl)
-                ? errEl.TryGetProperty("message", out var msgEl) ? msgEl.GetString() : json
-                : json;
+            var errMsg = "Unknown error";
+            try
+            {
+                var errDoc = JsonDocument.Parse(json);
+                if (errDoc.RootElement.TryGetProperty("error", out var errEl) &&
+                    errEl.TryGetProperty("message", out var msgEl))
+                {
+                    errMsg = msgEl.GetString() ?? json;
+                }
+            }
+            catch { errMsg = json; }
             throw new HttpRequestException($"Groq API error ({(int)response.StatusCode}): {errMsg}");
         }
 
-        using var doc = JsonDocument.Parse(json);
-        return doc.RootElement
-                  .GetProperty("choices")[0]
-                  .GetProperty("message")
-                  .GetProperty("content")
-                  .GetString() ?? string.Empty;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            // Null-safe navigation
+            if (!root.TryGetProperty("choices", out var choicesEl) || choicesEl.GetArrayLength() == 0)
+                return string.Empty;
+
+            var firstChoice = choicesEl[0];
+            if (!firstChoice.TryGetProperty("message", out var msgEl))
+                return string.Empty;
+
+            if (!msgEl.TryGetProperty("content", out var contentEl))
+                return string.Empty;
+
+            return contentEl.GetString() ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            DebugLogService.LogError("CallGroqAsync JSON parsing", ex);
+            throw;
+        }
     }
 
     // ── Streaming API ────────────────────────────────────────────────────────
@@ -165,18 +216,21 @@ public class AiService
         request.Headers.Add("X-Title", "Scriptly");
         request.Content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
 
-        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+        var retryPolicy = RetryService.GetHttpRetryPolicy();
+        using var response = await retryPolicy.ExecuteAsync(() => _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct));
 
         if (!response.IsSuccessStatusCode)
         {
             var errBody = await response.Content.ReadAsStringAsync(ct);
-            string? errMsg = null;
+            var errMsg = "Unknown error";
             try
             {
                 var errDoc = JsonDocument.Parse(errBody);
-                errMsg = errDoc.RootElement.TryGetProperty("error", out var errEl)
-                    ? errEl.TryGetProperty("message", out var msgEl) ? msgEl.GetString() : errBody
-                    : errBody;
+                if (errDoc.RootElement.TryGetProperty("error", out var errEl) &&
+                    errEl.TryGetProperty("message", out var msgEl))
+                {
+                    errMsg = msgEl.GetString() ?? errBody;
+                }
             }
             catch { errMsg = errBody; }
             throw new HttpRequestException($"OpenRouter API error ({(int)response.StatusCode}): {errMsg}");
@@ -198,14 +252,23 @@ public class AiService
             try
             {
                 using var doc = JsonDocument.Parse(data);
-                token = doc.RootElement
-                    .GetProperty("choices")[0]
-                    .GetProperty("delta")
-                    .TryGetProperty("content", out var contentEl)
-                        ? contentEl.GetString()
-                        : null;
+                var root = doc.RootElement;
+
+                // Null-safe streaming JSON parsing
+                if (root.TryGetProperty("choices", out var choicesEl) && choicesEl.GetArrayLength() > 0)
+                {
+                    var delta = choicesEl[0];
+                    if (delta.TryGetProperty("delta", out var deltaEl) &&
+                        deltaEl.TryGetProperty("content", out var contentEl))
+                    {
+                        token = contentEl.GetString();
+                    }
+                }
             }
-            catch { /* skip malformed SSE chunk */ }
+            catch (Exception ex)
+            {
+                DebugLogService.LogMessage($"Skipping malformed SSE: {ex.Message}");
+            }
 
             if (!string.IsNullOrEmpty(token))
                 yield return token;
@@ -234,18 +297,21 @@ public class AiService
         request.Headers.Add("Authorization", $"Bearer {config.ApiKey}");
         request.Content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
 
-        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+        var retryPolicy = RetryService.GetHttpRetryPolicy();
+        using var response = await retryPolicy.ExecuteAsync(() => _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct));
 
         if (!response.IsSuccessStatusCode)
         {
             var errBody = await response.Content.ReadAsStringAsync(ct);
-            string? errMsg = null;
+            var errMsg = "Unknown error";
             try
             {
                 var errDoc = JsonDocument.Parse(errBody);
-                errMsg = errDoc.RootElement.TryGetProperty("error", out var errEl)
-                    ? errEl.TryGetProperty("message", out var msgEl) ? msgEl.GetString() : errBody
-                    : errBody;
+                if (errDoc.RootElement.TryGetProperty("error", out var errEl) &&
+                    errEl.TryGetProperty("message", out var msgEl))
+                {
+                    errMsg = msgEl.GetString() ?? errBody;
+                }
             }
             catch { errMsg = errBody; }
             throw new HttpRequestException($"Groq API error ({(int)response.StatusCode}): {errMsg}");
@@ -267,14 +333,23 @@ public class AiService
             try
             {
                 using var doc = JsonDocument.Parse(data);
-                token = doc.RootElement
-                    .GetProperty("choices")[0]
-                    .GetProperty("delta")
-                    .TryGetProperty("content", out var contentEl)
-                        ? contentEl.GetString()
-                        : null;
+                var root = doc.RootElement;
+
+                // Null-safe streaming JSON parsing
+                if (root.TryGetProperty("choices", out var choicesEl) && choicesEl.GetArrayLength() > 0)
+                {
+                    var delta = choicesEl[0];
+                    if (delta.TryGetProperty("delta", out var deltaEl) &&
+                        deltaEl.TryGetProperty("content", out var contentEl))
+                    {
+                        token = contentEl.GetString();
+                    }
+                }
             }
-            catch { /* skip malformed SSE chunk */ }
+            catch (Exception ex)
+            {
+                DebugLogService.LogMessage($"Skipping malformed SSE: {ex.Message}");
+            }
 
             if (!string.IsNullOrEmpty(token))
                 yield return token;
