@@ -3,6 +3,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Text;
 using Scriptly.Models;
 using Scriptly.Services;
 
@@ -14,8 +15,10 @@ public partial class ResultWindow : Window
     private readonly TextCaptureService _textCapture;
     private readonly SettingsService _settingsService;
     private readonly HistoryService _historyService;
+    private readonly TextSanitizationService _textSanitizationService;
     private CancellationTokenSource? _cts;
     private string _resultText = string.Empty;
+    private readonly StringBuilder _rawResultBuilder = new();
 
     // Remembered for Regenerate and FullEditor
     private ActionItem? _currentAction;
@@ -47,6 +50,7 @@ public partial class ResultWindow : Window
         _settingsService = settingsService;
         _historyService = historyService;
         _analyticsService = analyticsService;
+        _textSanitizationService = new TextSanitizationService();
 
         InitializeComponent();
     }
@@ -60,6 +64,7 @@ public partial class ResultWindow : Window
         _cts?.Dispose();
         _cts = null;
         _resultText = string.Empty;
+        _rawResultBuilder.Clear();
 
         // Remember for Regenerate / Expand
         _currentAction       = action;
@@ -129,7 +134,12 @@ public partial class ResultWindow : Window
             {
                 chunkCount++;
                 resultLength += token.Length;
-                var t = token;
+                _rawResultBuilder.Append(token);
+
+                var t = _textSanitizationService.SanitizeChunk(token);
+                if (string.IsNullOrEmpty(t))
+                    continue;
+
                 _ = Dispatcher.BeginInvoke(() =>
                 {
                     // On the very first token: swap thinking panel → result panel
@@ -153,7 +163,12 @@ public partial class ResultWindow : Window
             {
                 ThinkingPanel.Visibility = Visibility.Collapsed;
                 ButtonPanel.Visibility   = Visibility.Visible;
-                if (firstToken) // zero tokens received
+
+                // Final pass sanitization ensures consistent text before history/copy/replace.
+                _resultText = _textSanitizationService.SanitizeFinal(_rawResultBuilder.ToString());
+                ResultText.Text = _resultText;
+
+                if (string.IsNullOrWhiteSpace(_resultText))
                 {
                     ErrorPanel.Visibility = Visibility.Visible;
                     ErrorText.Text        = "No response received from the AI.";
