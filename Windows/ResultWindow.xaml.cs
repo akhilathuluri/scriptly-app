@@ -28,6 +28,11 @@ public partial class ResultWindow : Window
     private bool _isDiffAction;
     private bool _showingDiff;
 
+    // Streaming UI buffer: avoid dispatching one TextBox update per token.
+    private readonly StringBuilder _pendingUiBuffer = new();
+    private readonly object _uiBufferLock = new();
+    private System.Windows.Threading.DispatcherTimer? _uiFlushTimer;
+
     // Developer analytics
     private readonly AnalyticsService _analyticsService;
 
@@ -65,6 +70,7 @@ public partial class ResultWindow : Window
         _cts = null;
         _resultText = string.Empty;
         _rawResultBuilder.Clear();
+        ClearPendingUiBuffer();
 
         // Remember for Regenerate / Expand
         _currentAction       = action;
@@ -119,6 +125,8 @@ public partial class ResultWindow : Window
     {
         _cts = new CancellationTokenSource();
         bool firstToken = true;
+        EnsureUiFlushTimer();
+        _uiFlushTimer!.Start();
 
         // Analytics: load provider info and start timer before any await
         var sw         = System.Diagnostics.Stopwatch.StartNew();
@@ -140,27 +148,32 @@ public partial class ResultWindow : Window
                 if (string.IsNullOrEmpty(t))
                     continue;
 
-                _ = Dispatcher.BeginInvoke(() =>
+                // First token flips from thinking state to result state once.
+                if (firstToken)
                 {
-                    // On the very first token: swap thinking panel → result panel
-                    if (firstToken)
+                    firstToken = false;
+                    _ = Dispatcher.BeginInvoke(() =>
                     {
-                        firstToken = false;
                         ThinkingPanel.Visibility = Visibility.Collapsed;
                         ResultPanel.Visibility   = Visibility.Visible;
                         ButtonPanel.Visibility   = Visibility.Visible;
                         ExpandButton.Visibility  = Visibility.Visible;
                         AnimateResultIn();
-                    }
-                    _resultText     += t;
-                    ResultText.Text  = _resultText;
-                    ResultText.ScrollToEnd();
-                });
+                    });
+                }
+
+                lock (_uiBufferLock)
+                {
+                    _pendingUiBuffer.Append(t);
+                }
             }
 
             // Stream complete — ensure buttons are visible even if stream was empty
             Dispatcher.Invoke(() =>
             {
+                FlushPendingUiBuffer();
+                _uiFlushTimer?.Stop();
+
                 ThinkingPanel.Visibility = Visibility.Collapsed;
                 ButtonPanel.Visibility   = Visibility.Visible;
 
@@ -205,14 +218,20 @@ public partial class ResultWindow : Window
         }
         catch (Exception ex)
         {
+            _uiFlushTimer?.Stop();
             _analyticsService.TrackActionError(action.Id, action.IsBuiltIn, ex.GetType().Name, provider);
             Dispatcher.Invoke(() =>
             {
+                FlushPendingUiBuffer();
                 ThinkingPanel.Visibility = Visibility.Collapsed;
                 ErrorPanel.Visibility    = Visibility.Visible;
                 ErrorText.Text           = ex.Message;
                 ButtonPanel.Visibility   = Visibility.Visible;
             });
+        }
+        finally
+        {
+            _uiFlushTimer?.Stop();
         }
     }
 
@@ -396,6 +415,7 @@ public partial class ResultWindow : Window
     private void AnimateClose(bool showCopied = false, Action? onComplete = null)
     {
         _cts?.Cancel();
+        _uiFlushTimer?.Stop();
         if (!IsVisible) { onComplete?.Invoke(); return; }
 
         var dur = new Duration(TimeSpan.FromMilliseconds(160));
@@ -412,5 +432,42 @@ public partial class ResultWindow : Window
         var scaleAnim = new DoubleAnimation(1.0, 0.95, dur) { EasingFunction = ease };
         ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleAnim);
         ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleAnim);
+    }
+
+    private void EnsureUiFlushTimer()
+    {
+        if (_uiFlushTimer != null) return;
+
+        _uiFlushTimer = new System.Windows.Threading.DispatcherTimer(
+            System.Windows.Threading.DispatcherPriority.Background,
+            Dispatcher)
+        {
+            Interval = TimeSpan.FromMilliseconds(40)
+        };
+
+        _uiFlushTimer.Tick += (_, _) => FlushPendingUiBuffer();
+    }
+
+    private void FlushPendingUiBuffer()
+    {
+        string append;
+        lock (_uiBufferLock)
+        {
+            if (_pendingUiBuffer.Length == 0) return;
+            append = _pendingUiBuffer.ToString();
+            _pendingUiBuffer.Clear();
+        }
+
+        _resultText += append;
+        ResultText.AppendText(append);
+        ResultText.ScrollToEnd();
+    }
+
+    private void ClearPendingUiBuffer()
+    {
+        lock (_uiBufferLock)
+        {
+            _pendingUiBuffer.Clear();
+        }
     }
 }
