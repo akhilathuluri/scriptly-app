@@ -145,11 +145,24 @@ Right-click the tray icon → **Settings**
 
 Settings are stored as JSON at:
 
-```
-%AppData%\Scriptly\settings.json
+```\n%AppData%\Scriptly\settings.json
 ```
 
 You can edit this file directly if needed. Delete it to reset to defaults.
+
+## Logs
+
+Scriptly writes debug logs to:
+
+```\n%AppData%\Scriptly\debug.log
+```
+
+Capture diagnostics logs (`[CAPTURE] ...`) are enabled by default for public builds.
+To disable capture diagnostics, set this environment variable before launching Scriptly:
+
+```powershell
+$env:SCRIPTLY_CAPTURE_DIAGNOSTICS = "0"
+```
 
 ---
 

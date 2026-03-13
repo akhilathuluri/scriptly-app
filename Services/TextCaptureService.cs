@@ -1,18 +1,20 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
 
 namespace Scriptly.Services;
 
 /// <summary>
-/// Captures selected text from any foreground application using
-/// the clipboard + Ctrl+C approach (via SendInput), then restores the clipboard.
-/// Also provides the cursor/caret position for popup placement.
+/// Captures selected text from any foreground application using several copy
+/// strategies (Ctrl+C, Ctrl+Insert, WM_COPY), then restores the clipboard.
+/// Also provides cursor position for popup placement.
 /// </summary>
 public class TextCaptureService
 {
-    // ── P/Invoke ────────────────────────────────────────────────────────────
+    private static readonly bool CaptureDiagnosticsEnabled =
+        !string.Equals(Environment.GetEnvironmentVariable("SCRIPTLY_CAPTURE_DIAGNOSTICS"), "0", StringComparison.OrdinalIgnoreCase);
 
+    // P/Invoke
     [DllImport("user32.dll")]
     private static extern bool GetCursorPos(out POINT lpPoint);
 
@@ -31,8 +33,7 @@ public class TextCaptureService
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
-    // ── Structures ──────────────────────────────────────────────────────────
-
+    // Structures
     [StructLayout(LayoutKind.Sequential)]
     private struct POINT { public int X; public int Y; }
 
@@ -76,21 +77,18 @@ public class TextCaptureService
         public ushort wParamL, wParamH;
     }
 
-    // ── Constants ───────────────────────────────────────────────────────────
-
-    private const uint   INPUT_KEYBOARD = 1;
-    private const uint   KEYEVENTF_KEYUP = 0x0002;
+    // Constants
+    private const uint INPUT_KEYBOARD = 1;
+    private const uint KEYEVENTF_KEYUP = 0x0002;
     private const ushort VK_CONTROL = 0x11;
-    private const ushort VK_SHIFT   = 0x10;
-    private const ushort VK_ALT     = 0x12;
-    private const ushort VK_LWIN    = 0x5B;
-    private const ushort VK_RWIN    = 0x5C;
+    private const ushort VK_SHIFT = 0x10;
+    private const ushort VK_ALT = 0x12;
+    private const ushort VK_LWIN = 0x5B;
+    private const ushort VK_RWIN = 0x5C;
     private const ushort VK_C = 0x43;
     private const ushort VK_INSERT = 0x2D;
     private const ushort VK_V = 0x56;
     private const uint WM_COPY = 0x0301;
-
-    // ── Helpers ─────────────────────────────────────────────────────────────
 
     private static INPUT KeyDown(ushort vk) => new INPUT
     {
@@ -123,23 +121,16 @@ public class TextCaptureService
         SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
     }
 
-    /// <summary>
-    /// Waits until Shift, Alt, and Win keys are all physically released (or until
-    /// the timeout elapses). This prevents our injected Ctrl+C from combining with
-    /// a held Shift to produce Ctrl+Shift+C — which opens DevTools in Chrome/Edge
-    /// and triggers other unintended commands in VS Code, Telegram, etc.
-    /// </summary>
     private static async Task<bool> WaitForModifiersReleasedAsync(int timeoutMs = 800)
     {
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
         while (DateTime.UtcNow < deadline)
         {
-            // GetAsyncKeyState: negative short = high bit set = key is physically held
             bool held = GetAsyncKeyState(VK_CONTROL) < 0 ||
                         GetAsyncKeyState(VK_SHIFT) < 0 ||
-                        GetAsyncKeyState(VK_ALT)   < 0 ||
-                        GetAsyncKeyState(VK_LWIN)  < 0 ||
-                        GetAsyncKeyState(VK_RWIN)  < 0;
+                        GetAsyncKeyState(VK_ALT) < 0 ||
+                        GetAsyncKeyState(VK_LWIN) < 0 ||
+                        GetAsyncKeyState(VK_RWIN) < 0;
             if (!held) return true;
             await Task.Delay(10);
         }
@@ -170,19 +161,13 @@ public class TextCaptureService
         return null;
     }
 
-    // ── Public API ──────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Gets the current text selection from the focused application by
-    /// temporarily sending Ctrl+C via SendInput and reading the clipboard.
-    /// Returns null if nothing was selected.
-    /// </summary>
     public async Task<string?> GetSelectedTextAsync()
     {
-        // Capture the foreground window immediately (before any async gap)
-        IntPtr sourceWindow = GetForegroundWindow();
+        LogCapture("Capture start");
 
-        // Save current clipboard content (all formats) so we can restore exactly.
+        IntPtr sourceWindow = GetForegroundWindow();
+        LogCapture($"Foreground window: 0x{sourceWindow.ToInt64():X}");
+
         string? previousClipboard = null;
         System.Windows.IDataObject? previousDataObject = null;
         try
@@ -193,13 +178,8 @@ public class TextCaptureService
         }
         catch { }
 
-        // Wait for the user to release Shift/Alt/Win before we inject Ctrl+C.
-        // If we skip this, a still-held Shift turns our Ctrl+C into Ctrl+Shift+C,
-        // which opens DevTools in Chromium browsers and fires IDE commands in VS Code.
-        // Ctrl does NOT need to be released — we drive it independently via SendInput.
         await WaitForModifiersReleasedAsync(500);
 
-        // Retry multiple copy strategies to handle app-specific behavior.
         var strategies = new Action[]
         {
             () => SendCtrlKey(VK_C),
@@ -211,17 +191,16 @@ public class TextCaptureService
         string? selected = null;
         for (int attempt = 0; attempt < strategies.Length; attempt++)
         {
-            // Restore foreground to the source window in case focus shifted
+            LogCapture($"Capture attempt {attempt + 1}/{strategies.Length}");
+
             if (sourceWindow != IntPtr.Zero)
                 SetForegroundWindow(sourceWindow);
 
             await Task.Delay(attempt == 0 ? 12 : 45);
 
-            // Ensure held modifiers from the hotkey don't transform copy behavior.
             ReleaseModifiers();
             await Task.Delay(8);
 
-            // Clear clipboard so successful copy is unambiguous for this attempt.
             try { Clipboard.Clear(); } catch { }
 
             strategies[attempt]();
@@ -230,8 +209,11 @@ public class TextCaptureService
             if (!string.IsNullOrWhiteSpace(captured))
             {
                 selected = captured;
+                LogCapture($"Clipboard capture success on attempt {attempt + 1} ({selected.Length} chars)");
                 break;
             }
+
+            LogCapture($"Clipboard capture attempt {attempt + 1} yielded no text");
         }
 
         if (string.IsNullOrWhiteSpace(selected))
@@ -241,7 +223,8 @@ public class TextCaptureService
                 selected = null;
         }
 
-        // Restore previous clipboard content
+        LogCapture(selected == null ? "Capture finished: no selected text" : $"Capture finished: success ({selected.Length} chars)");
+
         try
         {
             if (previousDataObject != null)
@@ -262,7 +245,10 @@ public class TextCaptureService
         {
             var focused = AutomationElement.FocusedElement;
             if (focused == null)
+            {
+                LogCapture("UIA fallback: focused element is null");
                 return null;
+            }
 
             if (focused.TryGetCurrentPattern(TextPattern.Pattern, out var textPatternObj) &&
                 textPatternObj is TextPattern textPattern)
@@ -272,7 +258,10 @@ public class TextCaptureService
                 {
                     var value = ranges[0].GetText(-1);
                     if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        LogCapture($"UIA TextPattern success ({value.Length} chars)");
                         return value;
+                    }
                 }
             }
 
@@ -281,39 +270,41 @@ public class TextCaptureService
             {
                 var value = valuePattern.Current.Value;
                 if (!string.IsNullOrWhiteSpace(value))
+                {
+                    LogCapture($"UIA ValuePattern fallback success ({value.Length} chars)");
                     return value;
+                }
             }
+
+            LogCapture("UIA fallback: no usable selected text from TextPattern/ValuePattern");
         }
         catch
         {
-            // Ignore UIA failures and let caller handle no-selection state.
+            LogCapture("UIA fallback threw an exception");
         }
 
         return null;
     }
 
-    /// <summary>
-    /// Replaces the selected text in the source application by putting
-    /// the result on the clipboard and sending Ctrl+V via SendInput.
-    /// </summary>
     public async Task ReplaceSelectedTextAsync(string newText)
     {
         try { Clipboard.SetText(newText); }
         catch { return; }
 
         await Task.Delay(80);
-
         SendCtrlKey(VK_V);
-
         await Task.Delay(80);
     }
 
-    /// <summary>
-    /// Returns the current mouse cursor position for popup placement.
-    /// </summary>
     public System.Windows.Point GetCursorPosition()
     {
         GetCursorPos(out var p);
         return new System.Windows.Point(p.X, p.Y);
+    }
+
+    private static void LogCapture(string message)
+    {
+        if (!CaptureDiagnosticsEnabled) return;
+        DebugLogService.LogMessage($"[CAPTURE] {message}");
     }
 }
