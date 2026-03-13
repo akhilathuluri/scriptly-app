@@ -38,9 +38,13 @@ public sealed class AnalyticsService : IDisposable
     {
         try
         {
-            var appSettingsPath = Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory,
-                "appsettings.json");
+            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+
+            // Developer override takes priority over the public default.
+            // appsettings.developer.json is gitignored and never shipped in releases.
+            var devPath = Path.Combine(baseDir, "appsettings.developer.json");
+            var pubPath = Path.Combine(baseDir, "appsettings.json");
+            var appSettingsPath = File.Exists(devPath) ? devPath : pubPath;
 
             if (File.Exists(appSettingsPath))
             {

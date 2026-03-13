@@ -20,7 +20,6 @@ public static class RetryService
                 (int)r.StatusCode == 429 ||  // Rate limited
                 (int)r.StatusCode == 503)    // Service unavailable
             .Or<HttpRequestException>()       // Network errors
-            .Or<OperationCanceledException>() // Timeouts
             .WaitAndRetryAsync(
                 retryCount: 3,
                 sleepDurationProvider: attempt =>

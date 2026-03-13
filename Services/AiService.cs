@@ -47,21 +47,23 @@ public class AiService
         if (string.IsNullOrWhiteSpace(config.Model))
             throw new InvalidOperationException("OpenRouter model is not configured. Please open Settings and specify a model name.");
 
-        var requestBody = new
+        var requestBodyJson = JsonSerializer.Serialize(new
         {
             model = config.Model,
             messages = new[] { new { role = "user", content = prompt } },
             max_tokens = 2048
-        };
-
-        using var request = new HttpRequestMessage(HttpMethod.Post, "https://openrouter.ai/api/v1/chat/completions");
-        request.Headers.Add("Authorization", $"Bearer {config.ApiKey}");
-        request.Headers.Add("HTTP-Referer", "https://scriptly.app");
-        request.Headers.Add("X-Title", "Scriptly");
-        request.Content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+        });
 
         var retryPolicy = RetryService.GetHttpRetryPolicy();
-        using var response = await retryPolicy.ExecuteAsync(() => _httpClient.SendAsync(request, ct));
+        using var response = await retryPolicy.ExecuteAsync(() =>
+        {
+            var req = new HttpRequestMessage(HttpMethod.Post, "https://openrouter.ai/api/v1/chat/completions");
+            req.Headers.Add("Authorization", $"Bearer {config.ApiKey}");
+            req.Headers.Add("HTTP-Referer", "https://scriptly.app");
+            req.Headers.Add("X-Title", "Scriptly");
+            req.Content = new StringContent(requestBodyJson, Encoding.UTF8, "application/json");
+            return _httpClient.SendAsync(req, ct);
+        });
         var json = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
@@ -113,19 +115,21 @@ public class AiService
         if (string.IsNullOrWhiteSpace(config.Model))
             throw new InvalidOperationException("Groq model is not configured. Please open Settings and specify a model name.");
 
-        var requestBody = new
+        var requestBodyJson = JsonSerializer.Serialize(new
         {
             model = config.Model,
             messages = new[] { new { role = "user", content = prompt } },
             max_tokens = 2048
-        };
-
-        using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.groq.com/openai/v1/chat/completions");
-        request.Headers.Add("Authorization", $"Bearer {config.ApiKey}");
-        request.Content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+        });
 
         var retryPolicy = RetryService.GetHttpRetryPolicy();
-        using var response = await retryPolicy.ExecuteAsync(() => _httpClient.SendAsync(request, ct));
+        using var response = await retryPolicy.ExecuteAsync(() =>
+        {
+            var req = new HttpRequestMessage(HttpMethod.Post, "https://api.groq.com/openai/v1/chat/completions");
+            req.Headers.Add("Authorization", $"Bearer {config.ApiKey}");
+            req.Content = new StringContent(requestBodyJson, Encoding.UTF8, "application/json");
+            return _httpClient.SendAsync(req, ct);
+        });
         var json = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
@@ -202,22 +206,24 @@ public class AiService
         if (string.IsNullOrWhiteSpace(config.Model))
             throw new InvalidOperationException("OpenRouter model is not configured. Please open Settings and specify a model name.");
 
-        var requestBody = new
+        var requestBodyJson = JsonSerializer.Serialize(new
         {
             model    = config.Model,
             messages = new[] { new { role = "user", content = prompt } },
             max_tokens = 2048,
             stream   = true
-        };
-
-        using var request = new HttpRequestMessage(HttpMethod.Post, "https://openrouter.ai/api/v1/chat/completions");
-        request.Headers.Add("Authorization", $"Bearer {config.ApiKey}");
-        request.Headers.Add("HTTP-Referer", "https://scriptly.app");
-        request.Headers.Add("X-Title", "Scriptly");
-        request.Content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+        });
 
         var retryPolicy = RetryService.GetHttpRetryPolicy();
-        using var response = await retryPolicy.ExecuteAsync(() => _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct));
+        using var response = await retryPolicy.ExecuteAsync(() =>
+        {
+            var req = new HttpRequestMessage(HttpMethod.Post, "https://openrouter.ai/api/v1/chat/completions");
+            req.Headers.Add("Authorization", $"Bearer {config.ApiKey}");
+            req.Headers.Add("HTTP-Referer", "https://scriptly.app");
+            req.Headers.Add("X-Title", "Scriptly");
+            req.Content = new StringContent(requestBodyJson, Encoding.UTF8, "application/json");
+            return _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        });
 
         if (!response.IsSuccessStatusCode)
         {
@@ -285,20 +291,22 @@ public class AiService
         if (string.IsNullOrWhiteSpace(config.Model))
             throw new InvalidOperationException("Groq model is not configured. Please open Settings and specify a model name.");
 
-        var requestBody = new
+        var requestBodyJson = JsonSerializer.Serialize(new
         {
             model    = config.Model,
             messages = new[] { new { role = "user", content = prompt } },
             max_tokens = 2048,
             stream   = true
-        };
-
-        using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.groq.com/openai/v1/chat/completions");
-        request.Headers.Add("Authorization", $"Bearer {config.ApiKey}");
-        request.Content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+        });
 
         var retryPolicy = RetryService.GetHttpRetryPolicy();
-        using var response = await retryPolicy.ExecuteAsync(() => _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct));
+        using var response = await retryPolicy.ExecuteAsync(() =>
+        {
+            var req = new HttpRequestMessage(HttpMethod.Post, "https://api.groq.com/openai/v1/chat/completions");
+            req.Headers.Add("Authorization", $"Bearer {config.ApiKey}");
+            req.Content = new StringContent(requestBodyJson, Encoding.UTF8, "application/json");
+            return _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        });
 
         if (!response.IsSuccessStatusCode)
         {
