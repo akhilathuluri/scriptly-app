@@ -134,25 +134,33 @@ public class GlobalHotkeyService : IDisposable
 
         if (isDown)
         {
-            // GetAsyncKeyState gives real-time physical key state — more reliable
-            // than GetKeyState inside an LL hook callback.
+            // Require configured modifiers to be present, but ignore extra pressed
+            // modifiers. This reduces misses in apps with additional key states.
+            bool ctrlDown  = GetAsyncKeyState(VK_CONTROL) < 0;
+            bool shiftDown = GetAsyncKeyState(VK_SHIFT)   < 0;
+            bool altDown   = GetAsyncKeyState(VK_ALT)     < 0;
+            bool winDown   = (GetAsyncKeyState(VK_LWIN) < 0) || (GetAsyncKeyState(VK_RWIN) < 0);
+
             bool modMatch =
-                (GetAsyncKeyState(VK_CONTROL) < 0) == _needCtrl &&
-                (GetAsyncKeyState(VK_SHIFT)   < 0) == _needShift &&
-                (GetAsyncKeyState(VK_ALT)     < 0) == _needAlt &&
-                ((GetAsyncKeyState(VK_LWIN) < 0) || (GetAsyncKeyState(VK_RWIN) < 0)) == _needWin;
+                (!_needCtrl  || ctrlDown) &&
+                (!_needShift || shiftDown) &&
+                (!_needAlt   || altDown) &&
+                (!_needWin   || winDown);
 
             if (modMatch)
             {
                 if (!_hotkeyDown)  // only on first press, not auto-repeat
                 {
                     _hotkeyDown = true;
-                    // BeginInvoke: the hook returns (IntPtr)1 IMMEDIATELY.
-                    // All capture work runs on the dispatcher after the hook chain resolves.
+
+                    // Fire immediately on key-down for maximum reliability.
+                    // All heavy work runs later on dispatcher; hook returns fast.
                     Application.Current?.Dispatcher.BeginInvoke(
                         DispatcherPriority.Input,
                         new Action(() => HotkeyPressed?.Invoke()));
                 }
+
+                // Swallow so target apps don't execute their own handlers.
                 return (IntPtr)1;   // swallow keydown (including auto-repeat)
             }
         }

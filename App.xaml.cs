@@ -18,6 +18,7 @@ public partial class App : Application
 
     // Hotkey debounce: prevent rapid repeated presses from spawning multiple windows
     private bool _hotkeyProcessing = false;
+    private DateTime _lastNoTextCapturedNoticeUtc = DateTime.MinValue;
 
     // Hidden message-only window to receive hotkey messages
     private HotkeyWindow? _hotkeyWindow;
@@ -115,7 +116,20 @@ public partial class App : Application
             var cursorPos = _textCapture.GetCursorPosition();
             var selectedText = await _textCapture.GetSelectedTextAsync();
 
-            if (string.IsNullOrWhiteSpace(selectedText)) return;
+            if (string.IsNullOrWhiteSpace(selectedText))
+            {
+                // Avoid silent no-op behavior; show a throttled hint to the user.
+                var now = DateTime.UtcNow;
+                if ((now - _lastNoTextCapturedNoticeUtc).TotalSeconds > 5)
+                {
+                    _lastNoTextCapturedNoticeUtc = now;
+                    _trayService?.ShowBalloon(
+                        "Scriptly",
+                        "Hotkey detected, but no text was captured. Select text and try again.",
+                        System.Windows.Forms.ToolTipIcon.Warning);
+                }
+                return;
+            }
 
             Dispatcher.Invoke(() =>
             {
