@@ -1,7 +1,5 @@
 # Scriptly
-
 A native Windows desktop app that transforms selected text with AI — from any application, without breaking your flow.
-
 Select text anywhere → press the hotkey → choose an action → get the result in seconds.
 
 ---
