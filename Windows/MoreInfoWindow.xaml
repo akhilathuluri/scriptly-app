@@ -1,0 +1,135 @@
+<Window x:Class="Scriptly.Windows.MoreInfoWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sys="clr-namespace:System;assembly=mscorlib"
+        Title="Scriptly More Info"
+        Width="500" Height="470"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        SnapsToDevicePixels="True"
+        UseLayoutRounding="True">
+
+    <Window.CacheMode>
+        <BitmapCache EnableClearType="True" SnapsToDevicePixels="True"/>
+    </Window.CacheMode>
+
+    <Window.Resources>
+        <Style x:Key="SectionTitleStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#7C6AF7"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+
+        <Style x:Key="BodyLabelStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#A0A0C4"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+
+        <Style x:Key="LinkButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#1E1E34"/>
+            <Setter Property="Foreground" Value="#8D8DCD"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,0,10,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#2A2A4A"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border x:Name="RootBorder"
+            Background="#16161E"
+            CornerRadius="14"
+            Opacity="0"
+            RenderTransformOrigin="0.5,0">
+
+        <Border.RenderTransform>
+            <TransformGroup>
+                <ScaleTransform x:Name="ScaleT" ScaleX="0.95" ScaleY="0.95"/>
+                <TranslateTransform x:Name="TranslateT" Y="-10"/>
+            </TransformGroup>
+        </Border.RenderTransform>
+
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="32" ShadowDepth="0" Color="#000000" Opacity="0.65"/>
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" Padding="20,15,14,10" MouseDown="TitleBar_MouseDown">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="ℹ" FontSize="16" Foreground="#7C6AF7" Margin="0,0,8,0"/>
+                        <TextBlock Text="More Info" FontSize="15" FontWeight="SemiBold" Foreground="#E0E0F0"/>
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="✕" Click="CloseButton_Click"
+                            Background="Transparent" BorderThickness="0"
+                            Foreground="#5A5A7A" FontSize="14" Cursor="Hand"
+                            Width="28" Height="28"/>
+                </Grid>
+            </Border>
+
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="20,8,20,0">
+                <StackPanel>
+                    <Border Background="#1A1A28" CornerRadius="10" Padding="14,12" Margin="0,0,0,12">
+                        <StackPanel>
+                            <TextBlock Text="APP DETAILS" Style="{StaticResource SectionTitleStyle}"/>
+                            <TextBlock x:Name="AppDetailsText" Style="{StaticResource BodyLabelStyle}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Background="#1A1A28" CornerRadius="10" Padding="14,12" Margin="0,0,0,12">
+                        <StackPanel>
+                            <TextBlock Text="DEVELOPER" Style="{StaticResource SectionTitleStyle}"/>
+                            <TextBlock x:Name="DeveloperNameText" Style="{StaticResource BodyLabelStyle}" Margin="0,0,0,6"/>
+                            <TextBlock x:Name="DeveloperMessageText" Style="{StaticResource BodyLabelStyle}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Background="#1A1A28" CornerRadius="10" Padding="14,12">
+                        <StackPanel>
+                            <TextBlock Text="GET IN TOUCH" Style="{StaticResource SectionTitleStyle}"/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Contact Developer" Style="{StaticResource LinkButtonStyle}" Click="ContactDeveloper_Click"/>
+                                <Button Content="Report Issue" Style="{StaticResource LinkButtonStyle}" Click="ReportIssue_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <Border Grid.Row="2" Padding="20,10,20,16">
+                <TextBlock Text="Help us improve Scriptly with your ideas and bug reports."
+                           FontSize="11" Foreground="#3E3E66" HorizontalAlignment="Center"/>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

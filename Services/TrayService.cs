@@ -15,6 +15,7 @@ public class TrayService : IDisposable
 
     public event Action? OpenSettingsRequested;
     public event Action? OpenHistoryRequested;
+    public event Action? OpenMoreInfoRequested;
     public event Action? ExitRequested;
 
     public void Initialize()
@@ -40,6 +41,10 @@ public class TrayService : IDisposable
         var settingsItem = new ToolStripMenuItem("⚙  Settings");
         settingsItem.Click += (_, _) => OpenSettingsRequested?.Invoke();
         _contextMenu.Items.Add(settingsItem);
+
+        var moreInfoItem = new ToolStripMenuItem("ℹ  More Info");
+        moreInfoItem.Click += (_, _) => OpenMoreInfoRequested?.Invoke();
+        _contextMenu.Items.Add(moreInfoItem);
 
         _contextMenu.Items.Add(new ToolStripSeparator());
 

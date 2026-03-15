@@ -1,4 +1,5 @@
 ﻿using System.Windows;
+using Scriptly.Models;
 using Scriptly.Services;
 using Scriptly.Windows;
 
@@ -27,6 +28,7 @@ public partial class App : Application
     private ActionPanelWindow? _actionPanel;
     private ResultWindow? _resultWindow;
     private HistoryWindow? _historyWindow;
+    private MoreInfoWindow? _moreInfoWindow;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -60,6 +62,7 @@ public partial class App : Application
         _trayService = new TrayService();
         _trayService.OpenSettingsRequested += OpenSettings;
         _trayService.OpenHistoryRequested  += OpenHistory;
+        _trayService.OpenMoreInfoRequested += OpenMoreInfo;
         _trayService.ExitRequested += () => Shutdown();
         _trayService.Initialize();
 
@@ -89,6 +92,7 @@ public partial class App : Application
         _resultWindow = new ResultWindow(_aiService, _textCapture, _settingsService, _historyService!, _analyticsService!);
         _actionPanel  = new ActionPanelWindow(_actionsService, _aiService, _textCapture, _settingsService, _resultWindow);
         _historyWindow = new HistoryWindow(_historyService!);
+        _moreInfoWindow = new MoreInfoWindow(DeveloperInfo.Default);
 
         // Show balloon on first start or if no API key set
         if (string.IsNullOrWhiteSpace(settings.OpenRouter.ApiKey) && string.IsNullOrWhiteSpace(settings.Groq.ApiKey))
@@ -196,6 +200,20 @@ public partial class App : Application
                 return;
             }
             _historyWindow.ShowPanel();
+        });
+    }
+
+    private void OpenMoreInfo()
+    {
+        Dispatcher.Invoke(() =>
+        {
+            if (_moreInfoWindow!.IsVisible)
+            {
+                _moreInfoWindow.Activate();
+                return;
+            }
+
+            _moreInfoWindow.ShowPanel();
         });
     }
 }
