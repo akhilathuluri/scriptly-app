@@ -24,6 +24,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="Scriptly.Tests\**\*.cs" />
+    <EmbeddedResource Remove="Scriptly.Tests\**\*" />
+    <None Remove="Scriptly.Tests\**\*" />
+    <Page Remove="Scriptly.Tests\**\*" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Update="app.manifest">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </None>

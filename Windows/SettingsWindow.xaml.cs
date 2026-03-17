@@ -133,6 +133,18 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private void RotateKeys_Click(object sender, RoutedEventArgs e)
+    {
+        _settingsService.ClearStoredApiKeys();
+
+        OpenRouterKeyBox.Password = string.Empty;
+        GroqKeyBox.Password = string.Empty;
+        _settings.OpenRouter.ApiKey = string.Empty;
+        _settings.Groq.ApiKey = string.Empty;
+
+        StatusLabel.Text = "✓ Stored API keys cleared. Add new keys and click Save.";
+    }
+
     private void ReleasesButton_Click(object sender, RoutedEventArgs e)
     {
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(

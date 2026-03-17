@@ -5,6 +5,7 @@ namespace Scriptly.Models;
 
 public class AppSettings
 {
+    public int SettingsVersion { get; set; } = 2;
     public string HotkeyModifiers { get; set; } = "Ctrl+Shift";
     public string HotkeyKey { get; set; } = "Space";
     public string ActiveProvider { get; set; } = "OpenRouter";

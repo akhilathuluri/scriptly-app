@@ -127,9 +127,10 @@ public partial class App : Application
                 if ((now - _lastNoTextCapturedNoticeUtc).TotalSeconds > 5)
                 {
                     _lastNoTextCapturedNoticeUtc = now;
+                    var details = _textCapture.GetFailureDiagnosticSummary();
                     _trayService?.ShowBalloon(
                         "Scriptly",
-                        "Hotkey detected, but no text was captured. Select text and try again.",
+                        $"Hotkey detected, but no text was captured. Select text and try again. {details}",
                         System.Windows.Forms.ToolTipIcon.Warning);
                 }
                 return;

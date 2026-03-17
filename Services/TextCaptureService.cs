@@ -1,6 +1,7 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
+using Scriptly.Models;
 
 namespace Scriptly.Services;
 
@@ -13,6 +14,8 @@ public class TextCaptureService
 {
     private static readonly bool CaptureDiagnosticsEnabled =
         !string.Equals(Environment.GetEnvironmentVariable("SCRIPTLY_CAPTURE_DIAGNOSTICS"), "0", StringComparison.OrdinalIgnoreCase);
+
+    public CaptureDiagnostics LastDiagnostics { get; private set; } = new();
 
     // P/Invoke
     [DllImport("user32.dll")]
@@ -29,6 +32,9 @@ public class TextCaptureService
 
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int vKey);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
@@ -168,6 +174,17 @@ public class TextCaptureService
         IntPtr sourceWindow = GetForegroundWindow();
         LogCapture($"Foreground window: 0x{sourceWindow.ToInt64():X}");
 
+        var appProfile = GetAppProfile(sourceWindow);
+        LastDiagnostics = new CaptureDiagnostics
+        {
+            AppType = appProfile.AppType,
+            ProcessName = appProfile.ProcessName,
+            LastStrategy = "None",
+            Attempts = 0,
+            Success = false,
+            UsedUiAutomationFallback = false
+        };
+
         string? previousClipboard = null;
         System.Windows.IDataObject? previousDataObject = null;
         try
@@ -180,18 +197,14 @@ public class TextCaptureService
 
         await WaitForModifiersReleasedAsync(500);
 
-        var strategies = new Action[]
-        {
-            () => SendCtrlKey(VK_C),
-            () => SendCtrlKey(VK_INSERT),
-            () => { if (sourceWindow != IntPtr.Zero) SendMessage(sourceWindow, WM_COPY, IntPtr.Zero, IntPtr.Zero); },
-            () => SendCtrlKey(VK_C)
-        };
+        var strategies = BuildStrategies(sourceWindow, appProfile.AppType);
 
         string? selected = null;
-        for (int attempt = 0; attempt < strategies.Length; attempt++)
+        for (int attempt = 0; attempt < strategies.Count; attempt++)
         {
-            LogCapture($"Capture attempt {attempt + 1}/{strategies.Length}");
+            LastDiagnostics.Attempts = attempt + 1;
+            LastDiagnostics.LastStrategy = strategies[attempt].Name;
+            LogCapture($"Capture attempt {attempt + 1}/{strategies.Count} using {strategies[attempt].Name}");
 
             if (sourceWindow != IntPtr.Zero)
                 SetForegroundWindow(sourceWindow);
@@ -203,12 +216,13 @@ public class TextCaptureService
 
             try { Clipboard.Clear(); } catch { }
 
-            strategies[attempt]();
+            strategies[attempt].Execute();
 
             var captured = await WaitForClipboardCaptureAsync(320 + attempt * 180);
             if (!string.IsNullOrWhiteSpace(captured))
             {
                 selected = captured;
+                LastDiagnostics.Success = true;
                 LogCapture($"Clipboard capture success on attempt {attempt + 1} ({selected.Length} chars)");
                 break;
             }
@@ -218,9 +232,12 @@ public class TextCaptureService
 
         if (string.IsNullOrWhiteSpace(selected))
         {
+            LastDiagnostics.UsedUiAutomationFallback = true;
             selected = TryGetSelectedTextViaUiAutomation();
             if (string.IsNullOrWhiteSpace(selected))
                 selected = null;
+            else
+                LastDiagnostics.Success = true;
         }
 
         LogCapture(selected == null ? "Capture finished: no selected text" : $"Capture finished: success ({selected.Length} chars)");
@@ -237,6 +254,73 @@ public class TextCaptureService
         catch { }
 
         return selected;
+    }
+
+    public string GetFailureDiagnosticSummary()
+    {
+        var d = LastDiagnostics;
+        return $"App: {d.ProcessName} ({d.AppType}), strategy: {d.LastStrategy}, UIA fallback: {(d.UsedUiAutomationFallback ? "used" : "not used")}";
+    }
+
+    private static List<CaptureStrategy> BuildStrategies(IntPtr sourceWindow, string appType)
+    {
+        var strategies = new List<CaptureStrategy>();
+
+        // Terminal apps often honor Ctrl+Insert more consistently than Ctrl+C.
+        if (appType == "Terminal")
+        {
+            strategies.Add(new CaptureStrategy("Ctrl+Insert", () => SendCtrlKey(VK_INSERT)));
+            strategies.Add(new CaptureStrategy("Ctrl+C", () => SendCtrlKey(VK_C)));
+        }
+        else
+        {
+            strategies.Add(new CaptureStrategy("Ctrl+C", () => SendCtrlKey(VK_C)));
+            strategies.Add(new CaptureStrategy("Ctrl+Insert", () => SendCtrlKey(VK_INSERT)));
+        }
+
+        strategies.Add(new CaptureStrategy("WM_COPY", () =>
+        {
+            if (sourceWindow != IntPtr.Zero)
+                SendMessage(sourceWindow, WM_COPY, IntPtr.Zero, IntPtr.Zero);
+        }));
+
+        strategies.Add(new CaptureStrategy("Ctrl+C (retry)", () => SendCtrlKey(VK_C)));
+        return strategies;
+    }
+
+    private static AppProfile GetAppProfile(IntPtr hwnd)
+    {
+        try
+        {
+            if (hwnd == IntPtr.Zero)
+                return new AppProfile("Unknown", "unknown");
+
+            GetWindowThreadProcessId(hwnd, out var pid);
+            if (pid == 0)
+                return new AppProfile("Unknown", "unknown");
+
+            using var process = System.Diagnostics.Process.GetProcessById((int)pid);
+            var name = process.ProcessName;
+            var lower = name.ToLowerInvariant();
+
+            if (lower.Contains("windowsterminal") || lower.Contains("powershell") || lower == "cmd" || lower == "wt")
+                return new AppProfile("Terminal", name);
+
+            if (lower.Contains("code") || lower.Contains("devenv") || lower.Contains("notepad") || lower.Contains("word"))
+                return new AppProfile("Editor", name);
+
+            if (lower.Contains("chrome") || lower.Contains("msedge") || lower.Contains("firefox") || lower.Contains("brave"))
+                return new AppProfile("Browser", name);
+
+            if (lower.Contains("teams") || lower.Contains("slack") || lower.Contains("discord") || lower.Contains("telegram"))
+                return new AppProfile("Chat", name);
+
+            return new AppProfile("Other", name);
+        }
+        catch
+        {
+            return new AppProfile("Unknown", "unknown");
+        }
     }
 
     private static string? TryGetSelectedTextViaUiAutomation()
@@ -307,4 +391,7 @@ public class TextCaptureService
         if (!CaptureDiagnosticsEnabled) return;
         DebugLogService.LogMessage($"[CAPTURE] {message}");
     }
+
+    private readonly record struct CaptureStrategy(string Name, Action Execute);
+    private readonly record struct AppProfile(string AppType, string ProcessName);
 }
