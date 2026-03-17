@@ -392,9 +392,14 @@ public class TextCaptureService
 
     public async Task<bool> ReplaceSelectedTextSafelyAsync(string newText, bool force)
     {
-        var validation = ValidateReplaceTarget();
-        if (!validation.IsSafe && !force)
-            return false;
+        if (!force)
+        {
+            await TryRestoreSourceFocusAsync();
+
+            var validation = ValidateReplaceTarget();
+            if (!validation.IsSafe)
+                return false;
+        }
 
         await ReplaceSelectedTextAsync(newText);
         return true;
@@ -465,6 +470,16 @@ public class TextCaptureService
         {
             return "unknown";
         }
+    }
+
+    private async Task TryRestoreSourceFocusAsync()
+    {
+        var source = LastSelectionContext;
+        if (source == null || source.WindowHandle == IntPtr.Zero)
+            return;
+
+        SetForegroundWindow(source.WindowHandle);
+        await Task.Delay(60);
     }
 
     private readonly record struct CaptureStrategy(string Name, Action Execute);

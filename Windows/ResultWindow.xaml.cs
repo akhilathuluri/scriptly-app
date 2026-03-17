@@ -268,8 +268,9 @@ public partial class ResultWindow : Window
         var validation = _textCapture.ValidateReplaceTarget();
         var settings = _settingsService.Load();
         bool forceReplace = false;
+        bool isScriptlyForeground = validation.CurrentProcessName.Equals("Scriptly", StringComparison.OrdinalIgnoreCase);
 
-        if (!validation.IsSafe)
+        if (!validation.IsSafe && !isScriptlyForeground)
         {
             var decision = MessageBox.Show(
                 "Focus changed since capture.\n\n" +
@@ -313,7 +314,25 @@ public partial class ResultWindow : Window
                 await Task.Delay(150); // allow window to fully close & source app to regain focus
                 bool replaced = await _textCapture.ReplaceSelectedTextSafelyAsync(text, forceReplace);
                 if (!replaced)
+                {
+                    var postValidation = _textCapture.ValidateReplaceTarget();
+                    var decision = MessageBox.Show(
+                        "Focus changed since capture.\n\n" +
+                        $"Captured in: {postValidation.SourceProcessName}\n" +
+                        $"Current app: {postValidation.CurrentProcessName}\n\n" +
+                        "Yes = Replace anyway\nNo = Copy only",
+                        "Unsafe Replace Detected",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning);
+
+                    if (decision == MessageBoxResult.Yes)
+                    {
+                        await _textCapture.ReplaceSelectedTextSafelyAsync(text, force: true);
+                        return;
+                    }
+
                     Clipboard.SetText(text);
+                }
             }
             catch { /* clipboard or focus errors — replacement already attempted, ignore */ }
         });

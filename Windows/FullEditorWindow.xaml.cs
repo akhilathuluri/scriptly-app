@@ -85,8 +85,9 @@ public partial class FullEditorWindow : Window
         var text = ResultTextBox.Text;
         var validation = _textCapture.ValidateReplaceTarget();
         bool forceReplace = false;
+        bool isScriptlyForeground = validation.CurrentProcessName.Equals("Scriptly", StringComparison.OrdinalIgnoreCase);
 
-        if (!validation.IsSafe)
+        if (!validation.IsSafe && !isScriptlyForeground)
         {
             var decision = MessageBox.Show(
                 "Focus changed since capture.\n\n" +
@@ -111,7 +112,25 @@ public partial class FullEditorWindow : Window
             await Task.Delay(150); // let window fully close before injecting keystrokes
             bool replaced = await _textCapture.ReplaceSelectedTextSafelyAsync(text, forceReplace);
             if (!replaced)
+            {
+                var postValidation = _textCapture.ValidateReplaceTarget();
+                var decision = MessageBox.Show(
+                    "Focus changed since capture.\n\n" +
+                    $"Captured in: {postValidation.SourceProcessName}\n" +
+                    $"Current app: {postValidation.CurrentProcessName}\n\n" +
+                    "Yes = Replace anyway\nNo = Copy only",
+                    "Unsafe Replace Detected",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+
+                if (decision == MessageBoxResult.Yes)
+                {
+                    await _textCapture.ReplaceSelectedTextSafelyAsync(text, force: true);
+                    return;
+                }
+
                 Clipboard.SetText(text);
+            }
         });
     }
 
