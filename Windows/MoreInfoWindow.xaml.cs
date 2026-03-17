@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media.Animation;
 using Scriptly.Models;
+using Scriptly.Services;
 
 namespace Scriptly.Windows;
 
@@ -95,18 +96,7 @@ public partial class MoreInfoWindow : Window
 
     private void AnimateOpen()
     {
-        var duration = new Duration(TimeSpan.FromMilliseconds(220));
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-
-        RootBorder.BeginAnimation(OpacityProperty,
-            new DoubleAnimation(0, 1, duration) { EasingFunction = ease });
-
-        var scaleAnimation = new DoubleAnimation(0.95, 1.0, duration) { EasingFunction = ease };
-        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleAnimation);
-        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleAnimation);
-
-        TranslateT.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty,
-            new DoubleAnimation(-10, 0, duration) { EasingFunction = ease });
+        WindowGpuAnimationService.AnimateOpen(RootBorder, ScaleT, 0.95, TranslateT, -10, 220);
     }
 
     private void AnimateClose()

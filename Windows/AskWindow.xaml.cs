@@ -22,14 +22,7 @@ public partial class AskWindow : Window
         _resultWindow = resultWindow;
 
         InitializeComponent();
-        Loaded += OnLoaded;
         Deactivated += (_, _) => AnimateClose();
-    }
-
-    private void OnLoaded(object sender, RoutedEventArgs e)
-    {
-        AnimateOpen();
-        PromptBox.Focus();
     }
 
     public void ShowWithText(string selectedText, System.Windows.Point cursorPos)
@@ -49,8 +42,11 @@ public partial class AskWindow : Window
         AskButton.IsEnabled = false;
 
         PositionNearCursor(cursorPos);
+
+        WindowGpuAnimationService.ResetOpenState(RootBorder, ScaleT, 0.92, TranslateT, 8);
         Show();
         Activate();
+        AnimateOpen();
         PromptBox.Focus();
     }
 
@@ -139,16 +135,7 @@ public partial class AskWindow : Window
 
     private void AnimateOpen()
     {
-        var dur  = new Duration(TimeSpan.FromMilliseconds(200));
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-
-        RootBorder.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, dur) { EasingFunction = ease });
-
-        var scaleAnim = new DoubleAnimation(0.92, 1.0, dur) { EasingFunction = ease };
-        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleAnim);
-        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleAnim);
-        TranslateT.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty,
-            new DoubleAnimation(8, 0, dur) { EasingFunction = ease });
+        WindowGpuAnimationService.AnimateOpen(RootBorder, ScaleT, 0.92, TranslateT, 8);
     }
 
     private bool _closing = false;

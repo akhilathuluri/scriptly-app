@@ -39,7 +39,7 @@ public class SettingsMigrationTests
         Assert.Equal("groq-secret", secretStore.Get("groq.apiKey"));
 
         var persisted = JsonDocument.Parse(File.ReadAllText(settingsPath)).RootElement;
-        Assert.Equal(2, persisted.GetProperty("SettingsVersion").GetInt32());
+        Assert.Equal(3, persisted.GetProperty("SettingsVersion").GetInt32());
         Assert.Equal(string.Empty, persisted.GetProperty("OpenRouter").GetProperty("ApiKey").GetString());
         Assert.Equal(string.Empty, persisted.GetProperty("Groq").GetProperty("ApiKey").GetString());
     }

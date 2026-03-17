@@ -126,6 +126,24 @@ public sealed class AnalyticsService : IDisposable
             app_version = _appVersion
         });
 
+    public void TrackDiagnosticError(string context, string errorType, string correlationId) =>
+        Capture("diagnostic_error", new
+        {
+            context,
+            error_type = errorType,
+            correlation_id = correlationId,
+            app_version = _appVersion
+        });
+
+    public void TrackCrashReported(string source, string errorType, string correlationId) =>
+        Capture("crash_reported", new
+        {
+            source,
+            error_type = errorType,
+            correlation_id = correlationId,
+            app_version = _appVersion
+        });
+
     // ── Internal ─────────────────────────────────────────────────────────────
 
     private void Capture<T>(string eventName, T properties)

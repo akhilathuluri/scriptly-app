@@ -16,6 +16,7 @@ public class TextCaptureService
         !string.Equals(Environment.GetEnvironmentVariable("SCRIPTLY_CAPTURE_DIAGNOSTICS"), "0", StringComparison.OrdinalIgnoreCase);
 
     public CaptureDiagnostics LastDiagnostics { get; private set; } = new();
+    public TextSelectionContext? LastSelectionContext { get; private set; }
 
     // P/Invoke
     [DllImport("user32.dll")]
@@ -175,6 +176,15 @@ public class TextCaptureService
         LogCapture($"Foreground window: 0x{sourceWindow.ToInt64():X}");
 
         var appProfile = GetAppProfile(sourceWindow);
+        GetWindowThreadProcessId(sourceWindow, out var sourcePid);
+        LastSelectionContext = new TextSelectionContext
+        {
+            WindowHandle = sourceWindow,
+            ProcessId = sourcePid,
+            ProcessName = appProfile.ProcessName,
+            CapturedUtc = DateTime.UtcNow
+        };
+
         LastDiagnostics = new CaptureDiagnostics
         {
             AppType = appProfile.AppType,
@@ -380,6 +390,49 @@ public class TextCaptureService
         await Task.Delay(80);
     }
 
+    public async Task<bool> ReplaceSelectedTextSafelyAsync(string newText, bool force)
+    {
+        var validation = ValidateReplaceTarget();
+        if (!validation.IsSafe && !force)
+            return false;
+
+        await ReplaceSelectedTextAsync(newText);
+        return true;
+    }
+
+    public ReplaceValidationResult ValidateReplaceTarget()
+    {
+        var source = LastSelectionContext;
+        if (source == null)
+        {
+            return new ReplaceValidationResult
+            {
+                IsSafe = false,
+                FocusChanged = true,
+                Reason = "Selection context is unavailable.",
+                SourceProcessName = "unknown",
+                CurrentProcessName = GetCurrentForegroundProcessName()
+            };
+        }
+
+        var currentWindow = GetForegroundWindow();
+        GetWindowThreadProcessId(currentWindow, out var currentPid);
+        var currentName = GetProcessName(currentPid);
+
+        bool sameWindow = currentWindow == source.WindowHandle;
+        bool sameProcess = currentPid != 0 && currentPid == source.ProcessId;
+        bool safe = sameWindow || sameProcess;
+
+        return new ReplaceValidationResult
+        {
+            IsSafe = safe,
+            FocusChanged = !safe,
+            SourceProcessName = source.ProcessName,
+            CurrentProcessName = currentName,
+            Reason = safe ? "Foreground matches source." : "Foreground focus changed since text capture."
+        };
+    }
+
     public System.Windows.Point GetCursorPosition()
     {
         GetCursorPos(out var p);
@@ -390,6 +443,28 @@ public class TextCaptureService
     {
         if (!CaptureDiagnosticsEnabled) return;
         DebugLogService.LogMessage($"[CAPTURE] {message}");
+    }
+
+    private static string GetCurrentForegroundProcessName()
+    {
+        var hwnd = GetForegroundWindow();
+        GetWindowThreadProcessId(hwnd, out var pid);
+        return GetProcessName(pid);
+    }
+
+    private static string GetProcessName(uint pid)
+    {
+        if (pid == 0) return "unknown";
+
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById((int)pid);
+            return process.ProcessName;
+        }
+        catch
+        {
+            return "unknown";
+        }
     }
 
     private readonly record struct CaptureStrategy(string Name, Action Execute);

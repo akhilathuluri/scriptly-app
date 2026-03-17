@@ -10,6 +10,7 @@ namespace Scriptly.Windows;
 public partial class SettingsWindow : Window
 {
     private readonly SettingsService _settingsService;
+    private readonly LocalizationService _loc;
     private AppSettings _settings;
     private Action<AppSettings>? _onSaved;
 
@@ -18,9 +19,14 @@ public partial class SettingsWindow : Window
         _settingsService = settingsService;
         _onSaved = onSaved;
         _settings = settingsService.Load();
+        _loc = new LocalizationService(_settings.Language);
 
         InitializeComponent();
+        ApplyLocalization();
         LoadSettings();
+
+        if (!string.IsNullOrWhiteSpace(_settingsService.LastRecoveryMessage))
+            StatusLabel.Text = _settingsService.LastRecoveryMessage;
     }
 
     private void LoadSettings()
@@ -42,6 +48,10 @@ public partial class SettingsWindow : Window
 
         // General
         StartWithWindowsCheck.IsChecked = StartupService.IsEnabled();
+        SafeReplacePreviewCheck.IsChecked = _settings.SafeReplacePreviewMode;
+        EnableDiagnosticsBundleCheck.IsChecked = _settings.EnableDiagnosticsBundle;
+
+        LanguageCombo.SelectedIndex = _settings.Language == "es" ? 1 : 0;
 
         // Version
         var v = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
@@ -80,12 +90,18 @@ public partial class SettingsWindow : Window
             _settings.ActiveProvider = item.Tag?.ToString() ?? "OpenRouter";
 
         _settings.StartWithWindows = StartWithWindowsCheck.IsChecked == true;
+        _settings.SafeReplacePreviewMode = SafeReplacePreviewCheck.IsChecked == true;
+        _settings.EnableDiagnosticsBundle = EnableDiagnosticsBundleCheck.IsChecked == true;
+
+        if (LanguageCombo.SelectedItem is ComboBoxItem languageItem)
+            _settings.Language = languageItem.Tag?.ToString() ?? "en";
+
         StartupService.Apply(_settings.StartWithWindows);
 
         _settingsService.Save(_settings);
         _onSaved?.Invoke(_settings);
 
-        StatusLabel.Text = "✓ Settings saved";
+        StatusLabel.Text = _loc.T("settings.saved", "✓ Settings saved");
         var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         timer.Tick += (_, _) => { StatusLabel.Text = ""; timer.Stop(); };
         timer.Start();
@@ -142,7 +158,7 @@ public partial class SettingsWindow : Window
         _settings.OpenRouter.ApiKey = string.Empty;
         _settings.Groq.ApiKey = string.Empty;
 
-        StatusLabel.Text = "✓ Stored API keys cleared. Add new keys and click Save.";
+        StatusLabel.Text = _loc.T("settings.keysCleared", "✓ Stored API keys cleared. Add new keys and click Save.");
     }
 
     private void ReleasesButton_Click(object sender, RoutedEventArgs e)
@@ -161,15 +177,32 @@ public partial class SettingsWindow : Window
     protected override void OnContentRendered(EventArgs e)
     {
         base.OnContentRendered(e);
+        WindowGpuAnimationService.AnimateOpen(RootBorder, ScaleT, 0.96);
+    }
 
-        var dur  = new Duration(TimeSpan.FromMilliseconds(200));
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-
-        RootBorder.BeginAnimation(OpacityProperty,
-            new DoubleAnimation(0, 1, dur) { EasingFunction = ease });
-
-        var scaleAnim = new DoubleAnimation(0.96, 1.0, dur) { EasingFunction = ease };
-        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleAnim);
-        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleAnim);
+    private void ApplyLocalization()
+    {
+        SettingsTitleText.Text = _loc.T("settings.title", "Settings");
+        AiProviderHeaderText.Text = _loc.T("settings.aiProvider", "AI PROVIDER");
+        ProviderLabelText.Text = _loc.T("settings.provider", "Provider");
+        OpenRouterApiKeyLabelText.Text = _loc.T("settings.openrouterKey", "OpenRouter API Key");
+        OpenRouterModelLabelText.Text = _loc.T("settings.modelOpenrouter", "Model (e.g. openai/gpt-4o-mini)");
+        GroqApiKeyLabelText.Text = _loc.T("settings.groqKey", "Groq API Key");
+        GroqModelLabelText.Text = _loc.T("settings.modelGroq", "Model (e.g. llama-3.3-70b-versatile)");
+        ApiEncryptedNoteText.Text = _loc.T("settings.encryptedNote", "API keys are encrypted with Windows DPAPI.");
+        RotateKeysButton.Content = _loc.T("settings.rotateKeys", "Rotate Keys");
+        LanguageHeaderText.Text = _loc.T("settings.languageHeader", "LANGUAGE");
+        LanguageLabelText.Text = _loc.T("settings.language", "Display Language");
+        KeyboardShortcutHeaderText.Text = _loc.T("settings.hotkeyHeader", "KEYBOARD SHORTCUT");
+        ModifiersLabelText.Text = _loc.T("settings.modifiers", "Modifiers (e.g. Ctrl+Shift)");
+        KeyLabelText.Text = _loc.T("settings.key", "Key (e.g. Space)");
+        GeneralHeaderText.Text = _loc.T("settings.general", "GENERAL");
+        StartWithWindowsCheck.Content = _loc.T("settings.startWithWindows", "Start Scriptly automatically when Windows starts");
+        SafeReplacePreviewCheck.Content = _loc.T("settings.safeReplacePreview", "Enable safe replace preview confirmation");
+        EnableDiagnosticsBundleCheck.Content = _loc.T("settings.enableDiagnostics", "Enable diagnostic bundle generation (opt-in)");
+        CustomActionsHeaderText.Text = _loc.T("settings.customActions", "CUSTOM ACTIONS");
+        NewActionButton.Content = _loc.T("settings.newAction", "+ New Action");
+        CancelButton.Content = _loc.T("common.cancel", "Cancel");
+        SaveButton.Content = _loc.T("common.save", "Save");
     }
 }

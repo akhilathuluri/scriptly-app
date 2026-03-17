@@ -5,7 +5,7 @@ namespace Scriptly.Models;
 
 public class AppSettings
 {
-    public int SettingsVersion { get; set; } = 2;
+    public int SettingsVersion { get; set; } = 3;
     public string HotkeyModifiers { get; set; } = "Ctrl+Shift";
     public string HotkeyKey { get; set; } = "Space";
     public string ActiveProvider { get; set; } = "OpenRouter";
@@ -14,6 +14,9 @@ public class AppSettings
     public List<CustomAction> CustomActions { get; set; } = new();
     public bool StartWithWindows { get; set; } = false;
     public string Theme { get; set; } = "Dark";
+    public string Language { get; set; } = "en";
+    public bool SafeReplacePreviewMode { get; set; } = false;
+    public bool EnableDiagnosticsBundle { get; set; } = false;
 }
 
 public class OpenRouterSettings

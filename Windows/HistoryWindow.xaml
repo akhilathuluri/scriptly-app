@@ -53,7 +53,7 @@
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="📋" FontSize="15" Margin="0,0,8,0"
                                    VerticalAlignment="Center"/>
-                        <TextBlock Text="History" FontSize="15" FontWeight="SemiBold"
+                        <TextBlock x:Name="HistoryTitleText" Text="History" FontSize="15" FontWeight="SemiBold"
                                    Foreground="#E0E0F0" VerticalAlignment="Center"/>
                         <TextBlock x:Name="CountLabel" FontSize="12" Foreground="#505080"
                                    Margin="8,0,0,0" VerticalAlignment="Center"/>
@@ -100,9 +100,9 @@
                         HorizontalAlignment="Center" VerticalAlignment="Center">
                 <TextBlock Text="📭" FontSize="38" HorizontalAlignment="Center"
                            Margin="0,0,0,14"/>
-                <TextBlock Text="No history yet" FontSize="14" Foreground="#506080"
+                <TextBlock x:Name="NoHistoryText" Text="No history yet" FontSize="14" Foreground="#506080"
                            HorizontalAlignment="Center" FontWeight="Medium"/>
-                <TextBlock Text="Processed results will appear here" FontSize="12"
+                <TextBlock x:Name="NoHistoryHintText" Text="Processed results will appear here" FontSize="12"
                            Foreground="#383858" HorizontalAlignment="Center"
                            Margin="0,5,0,0"/>
             </StackPanel>

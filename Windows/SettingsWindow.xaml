@@ -256,7 +256,7 @@
                     </Grid.ColumnDefinitions>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="⚙" FontSize="16" Foreground="#7C6AF7" Margin="0,0,8,0"/>
-                        <TextBlock Text="Settings" FontSize="16" FontWeight="SemiBold" Foreground="#E0E0F0"/>
+                        <TextBlock x:Name="SettingsTitleText" Text="Settings" FontSize="16" FontWeight="SemiBold" Foreground="#E0E0F0"/>
                     </StackPanel>
                     <Button Grid.Column="1" Content="✕" Click="CloseButton_Click"
                             Background="Transparent" BorderThickness="0"
@@ -270,9 +270,9 @@
                 <StackPanel>
 
                     <!-- ── AI Provider ── -->
-                    <TextBlock Text="AI PROVIDER" Style="{StaticResource SectionHeader}"/>
+                    <TextBlock x:Name="AiProviderHeaderText" Text="AI PROVIDER" Style="{StaticResource SectionHeader}"/>
 
-                    <TextBlock Text="Provider" Style="{StaticResource LabelStyle}"/>
+                    <TextBlock x:Name="ProviderLabelText" Text="Provider" Style="{StaticResource LabelStyle}"/>
                     <ComboBox x:Name="ProviderCombo" Style="{StaticResource ComboStyle}"
                               SelectionChanged="ProviderCombo_SelectionChanged"
                               Margin="0,0,0,12">
@@ -282,12 +282,12 @@
 
                     <!-- OpenRouter settings -->
                     <StackPanel x:Name="OpenRouterPanel">
-                        <TextBlock Text="OpenRouter API Key" Style="{StaticResource LabelStyle}"/>
+                        <TextBlock x:Name="OpenRouterApiKeyLabelText" Text="OpenRouter API Key" Style="{StaticResource LabelStyle}"/>
                         <PasswordBox x:Name="OpenRouterKeyBox" Style="{StaticResource PasswordStyle}"
                                  Margin="0,0,0,10"
                                  ToolTip="Your OpenRouter API key from openrouter.ai"/>
 
-                        <TextBlock Text="Model (e.g. openai/gpt-4o-mini)" Style="{StaticResource LabelStyle}"/>
+                        <TextBlock x:Name="OpenRouterModelLabelText" Text="Model (e.g. openai/gpt-4o-mini)" Style="{StaticResource LabelStyle}"/>
                         <TextBox x:Name="OpenRouterModelBox" Style="{StaticResource InputStyle}"
                                  Margin="0,0,0,12"
                                  ToolTip="Full model identifier from OpenRouter"/>
@@ -295,12 +295,12 @@
 
                     <!-- Groq settings -->
                     <StackPanel x:Name="GroqPanel" Visibility="Collapsed">
-                        <TextBlock Text="Groq API Key" Style="{StaticResource LabelStyle}"/>
+                        <TextBlock x:Name="GroqApiKeyLabelText" Text="Groq API Key" Style="{StaticResource LabelStyle}"/>
                         <PasswordBox x:Name="GroqKeyBox" Style="{StaticResource PasswordStyle}"
                                  Margin="0,0,0,10"
                                  ToolTip="Your Groq API key from console.groq.com"/>
 
-                        <TextBlock Text="Model (e.g. llama-3.3-70b-versatile)" Style="{StaticResource LabelStyle}"/>
+                        <TextBlock x:Name="GroqModelLabelText" Text="Model (e.g. llama-3.3-70b-versatile)" Style="{StaticResource LabelStyle}"/>
                         <TextBox x:Name="GroqModelBox" Style="{StaticResource InputStyle}"
                                  Margin="0,0,0,12"
                                  ToolTip="Groq model name"/>
@@ -312,16 +312,23 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="API keys are encrypted with Windows DPAPI."
+                            <TextBlock x:Name="ApiEncryptedNoteText" Text="API keys are encrypted with Windows DPAPI."
                                        Foreground="#8080A8" FontSize="12" VerticalAlignment="Center"/>
-                            <Button Grid.Column="1" Content="Rotate Keys"
+                            <Button x:Name="RotateKeysButton" Grid.Column="1" Content="Rotate Keys"
                                     Style="{StaticResource SecondaryButton}"
                                     Click="RotateKeys_Click" FontSize="11" Padding="10,5"/>
                         </Grid>
                     </Border>
 
+                    <TextBlock x:Name="LanguageHeaderText" Text="LANGUAGE" Style="{StaticResource SectionHeader}"/>
+                    <TextBlock x:Name="LanguageLabelText" Text="Display Language" Style="{StaticResource LabelStyle}"/>
+                    <ComboBox x:Name="LanguageCombo" Style="{StaticResource ComboStyle}" Margin="0,0,0,12">
+                        <ComboBoxItem Content="English" Tag="en"/>
+                        <ComboBoxItem Content="Español" Tag="es"/>
+                    </ComboBox>
+
                     <!-- ── Hotkey ── -->
-                    <TextBlock Text="KEYBOARD SHORTCUT" Style="{StaticResource SectionHeader}"/>
+                    <TextBlock x:Name="KeyboardShortcutHeaderText" Text="KEYBOARD SHORTCUT" Style="{StaticResource SectionHeader}"/>
                     <Grid Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -329,22 +336,34 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0">
-                            <TextBlock Text="Modifiers (e.g. Ctrl+Shift)" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="ModifiersLabelText" Text="Modifiers (e.g. Ctrl+Shift)" Style="{StaticResource LabelStyle}"/>
                             <TextBox x:Name="HotkeyModifiers" Style="{StaticResource InputStyle}"
                                      ToolTip="Ctrl, Shift, Alt, Win - combine with +"/>
                         </StackPanel>
                         <StackPanel Grid.Column="2">
-                            <TextBlock Text="Key (e.g. Space)" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="KeyLabelText" Text="Key (e.g. Space)" Style="{StaticResource LabelStyle}"/>
                             <TextBox x:Name="HotkeyKey" Style="{StaticResource InputStyle}"
                                      ToolTip="Any keyboard key name"/>
                         </StackPanel>
                     </Grid>
 
                     <!-- ── General ── -->
-                    <TextBlock Text="GENERAL" Style="{StaticResource SectionHeader}"/>
+                    <TextBlock x:Name="GeneralHeaderText" Text="GENERAL" Style="{StaticResource SectionHeader}"/>
                     <Border Background="#1A1A28" CornerRadius="8" Padding="12,10" Margin="0,0,0,12">
                         <CheckBox x:Name="StartWithWindowsCheck"
                                   Content="Start Scriptly automatically when Windows starts"
+                                  Foreground="#B0B0C8" FontSize="13" Cursor="Hand"/>
+                    </Border>
+
+                    <Border Background="#1A1A28" CornerRadius="8" Padding="12,10" Margin="0,0,0,12">
+                        <CheckBox x:Name="SafeReplacePreviewCheck"
+                                  Content="Enable safe replace preview confirmation"
+                                  Foreground="#B0B0C8" FontSize="13" Cursor="Hand"/>
+                    </Border>
+
+                    <Border Background="#1A1A28" CornerRadius="8" Padding="12,10" Margin="0,0,0,12">
+                        <CheckBox x:Name="EnableDiagnosticsBundleCheck"
+                                  Content="Enable diagnostic bundle generation (opt-in)"
                                   Foreground="#B0B0C8" FontSize="13" Cursor="Hand"/>
                     </Border>
 
@@ -354,9 +373,9 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="CUSTOM ACTIONS" Style="{StaticResource SectionHeader}"
+                        <TextBlock x:Name="CustomActionsHeaderText" Text="CUSTOM ACTIONS" Style="{StaticResource SectionHeader}"
                                    Margin="0,16,0,0" VerticalAlignment="Bottom"/>
-                        <Button Grid.Column="1" Content="+ New Action"
+                        <Button x:Name="NewActionButton" Grid.Column="1" Content="+ New Action"
                                 Style="{StaticResource SecondaryButton}"
                                 Click="NewAction_Click"
                                 FontSize="12" Padding="10,5"
@@ -444,9 +463,9 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock x:Name="StatusLabel" FontSize="12" Foreground="#6C9C6C"
                                VerticalAlignment="Center"/>
-                    <Button Grid.Column="1" Content="Cancel" Style="{StaticResource SecondaryButton}"
+                        <Button x:Name="CancelButton" Grid.Column="1" Content="Cancel" Style="{StaticResource SecondaryButton}"
                             Click="CancelButton_Click"/>
-                    <Button Grid.Column="3" Content="Save" Style="{StaticResource PrimaryButton}"
+                        <Button x:Name="SaveButton" Grid.Column="3" Content="Save" Style="{StaticResource PrimaryButton}"
                             Click="SaveButton_Click"/>
                 </Grid>
             </Border>

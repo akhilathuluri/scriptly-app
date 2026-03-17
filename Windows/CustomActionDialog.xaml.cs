@@ -1,5 +1,6 @@
 using System.Windows;
 using Scriptly.Models;
+using Scriptly.Services;
 
 namespace Scriptly.Windows;
 
@@ -24,6 +25,14 @@ public partial class CustomActionDialog : Window
         {
             _existingId = Guid.NewGuid();
         }
+
+        Loaded += OnLoaded;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        WindowGpuAnimationService.ResetOpenState(RootBorder, ScaleT, 0.94, TranslateT, 8);
+        WindowGpuAnimationService.AnimateOpen(RootBorder, ScaleT, 0.94, TranslateT, 8);
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)

@@ -83,13 +83,35 @@ public partial class FullEditorWindow : Window
     private void ReplaceButton_Click(object sender, RoutedEventArgs e)
     {
         var text = ResultTextBox.Text;
+        var validation = _textCapture.ValidateReplaceTarget();
+        bool forceReplace = false;
+
+        if (!validation.IsSafe)
+        {
+            var decision = MessageBox.Show(
+                "Focus changed since capture.\n\n" +
+                $"Captured in: {validation.SourceProcessName}\n" +
+                $"Current app: {validation.CurrentProcessName}\n\n" +
+                "Replace anyway?",
+                "Unsafe Replace Detected",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (decision != MessageBoxResult.Yes)
+                return;
+
+            forceReplace = true;
+        }
+
         Close();
         // Dispatcher.BeginInvoke runs on the STA UI thread — required for Clipboard.SetText.
         // Task.Run uses MTA thread-pool threads which cause ThreadStateException on clipboard calls.
         _ = Application.Current.Dispatcher.BeginInvoke(async () =>
         {
             await Task.Delay(150); // let window fully close before injecting keystrokes
-            await _textCapture.ReplaceSelectedTextAsync(text);
+            bool replaced = await _textCapture.ReplaceSelectedTextSafelyAsync(text, forceReplace);
+            if (!replaced)
+                Clipboard.SetText(text);
         });
     }
 
@@ -113,15 +135,6 @@ public partial class FullEditorWindow : Window
     protected override void OnContentRendered(EventArgs e)
     {
         base.OnContentRendered(e);
-
-        var dur  = new Duration(TimeSpan.FromMilliseconds(200));
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-
-        RootBorder.BeginAnimation(OpacityProperty,
-            new DoubleAnimation(0, 1, dur) { EasingFunction = ease });
-
-        var scaleAnim = new DoubleAnimation(0.97, 1.0, dur) { EasingFunction = ease };
-        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleAnim);
-        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleAnim);
+        WindowGpuAnimationService.AnimateOpen(RootBorder, ScaleT, 0.97);
     }
 }

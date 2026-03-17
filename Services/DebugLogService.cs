@@ -1,4 +1,6 @@
 using System.IO;
+using System.Text.Json;
+using Scriptly.Models;
 
 namespace Scriptly.Services;
 
@@ -12,6 +14,10 @@ public static class DebugLogService
     private static readonly string LogPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "Scriptly", "debug.log");
+
+    private static readonly string DiagnosticPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "Scriptly", "diagnostics.jsonl");
 
     private static readonly object _lock = new();
 
@@ -46,6 +52,29 @@ public static class DebugLogService
                 File.AppendAllText(LogPath, logLine);
             }
             catch { /* silently ignore log failures — must never throw */ }
+        }
+    }
+
+    /// <summary>
+    /// Logs a machine-readable JSON line for diagnostics and support analysis.
+    /// </summary>
+    public static void LogDiagnosticEvent(DiagnosticEvent evt)
+    {
+        lock (_lock)
+        {
+            try
+            {
+                var dir = Path.GetDirectoryName(DiagnosticPath);
+                if (dir != null)
+                    Directory.CreateDirectory(dir);
+
+                var line = JsonSerializer.Serialize(evt) + "\n";
+                File.AppendAllText(DiagnosticPath, line);
+            }
+            catch
+            {
+                // Diagnostics must never impact app execution.
+            }
         }
     }
 }

@@ -15,6 +15,7 @@ public partial class App : Application
     private AiService? _aiService;
     private HistoryService? _historyService;
     private AnalyticsService? _analyticsService;
+    private DiagnosticsService? _diagnosticsService;
     private System.Threading.Mutex? _mutex; // kept alive for the process lifetime
 
     // Hotkey debounce: prevent rapid repeated presses from spawning multiple windows
@@ -57,6 +58,11 @@ public partial class App : Application
         // Analytics — developer-only, silently disabled if API key is not set
         _analyticsService = new AnalyticsService();
         _analyticsService.TrackAppStarted();
+        _diagnosticsService = new DiagnosticsService(_settingsService, _analyticsService);
+
+        DispatcherUnhandledException += OnDispatcherUnhandledException;
+        AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
+        TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
         // Tray
         _trayService = new TrayService();
@@ -89,7 +95,7 @@ public partial class App : Application
         StartupService.Apply(settings.StartWithWindows);
 
         // Pre-create windows (hidden) — reused on every hotkey press
-        _resultWindow = new ResultWindow(_aiService, _textCapture, _settingsService, _historyService!, _analyticsService!);
+        _resultWindow = new ResultWindow(_aiService, _textCapture, _settingsService, _historyService!, _analyticsService!, _diagnosticsService);
         _actionPanel  = new ActionPanelWindow(_actionsService, _aiService, _textCapture, _settingsService, _resultWindow);
         _historyWindow = new HistoryWindow(_historyService!);
         _moreInfoWindow = new MoreInfoWindow(DeveloperInfo.Default);
@@ -104,6 +110,11 @@ public partial class App : Application
         {
             _trayService.ShowBalloon("Scriptly is running",
                 $"Select text anywhere and press {settings.HotkeyModifiers}+{settings.HotkeyKey}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(_settingsService.LastRecoveryMessage))
+        {
+            _trayService.ShowBalloon("Scriptly settings recovered", _settingsService.LastRecoveryMessage!);
         }
     }
 
@@ -149,6 +160,8 @@ public partial class App : Application
         catch (Exception ex)
         {
             DebugLogService.LogError("OnHotkeyPressed", ex);
+            var cid = _diagnosticsService?.NewCorrelationId() ?? Guid.NewGuid().ToString("N");
+            _diagnosticsService?.ReportHandledError("OnHotkeyPressed", ex, cid);
         }
         finally
         {
@@ -189,6 +202,25 @@ public partial class App : Application
         _mutex?.ReleaseMutex();
         _mutex?.Dispose();
         base.OnExit(e);
+    }
+
+    private void OnDispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
+    {
+        var cid = _diagnosticsService?.NewCorrelationId() ?? Guid.NewGuid().ToString("N");
+        _diagnosticsService?.ReportCrash("DispatcherUnhandledException", e.Exception, cid);
+    }
+
+    private void OnUnhandledException(object? sender, UnhandledExceptionEventArgs e)
+    {
+        var exception = e.ExceptionObject as Exception ?? new Exception("Unknown unhandled exception");
+        var cid = _diagnosticsService?.NewCorrelationId() ?? Guid.NewGuid().ToString("N");
+        _diagnosticsService?.ReportCrash("AppDomainUnhandledException", exception, cid);
+    }
+
+    private void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
+    {
+        var cid = _diagnosticsService?.NewCorrelationId() ?? Guid.NewGuid().ToString("N");
+        _diagnosticsService?.ReportCrash("TaskSchedulerUnobservedTaskException", e.Exception, cid);
     }
 
     private void OpenHistory()

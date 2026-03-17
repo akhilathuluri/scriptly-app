@@ -22,6 +22,8 @@ public class SettingsService
     private readonly ISecretStore _secretStore;
     private readonly string _settingsPath;
 
+    public string? LastRecoveryMessage { get; private set; }
+
     public SettingsService()
         : this(DefaultSettingsPath, new DpapiSecretStore())
     {
@@ -40,6 +42,8 @@ public class SettingsService
 
     public AppSettings Load()
     {
+        LastRecoveryMessage = null;
+
         try
         {
             AppSettings settings;
@@ -55,16 +59,27 @@ public class SettingsService
             }
 
             bool migratedFromPlaintext = HydrateSecrets(settings);
+            bool migrated = false;
+            bool recovered = ValidateAndRepair(settings, out var recoveryMessage);
 
             if (settings.SettingsVersion < 2)
             {
                 settings.SettingsVersion = 2;
-                Save(settings);
+                migrated = true;
             }
-            else if (migratedFromPlaintext)
+
+            if (settings.SettingsVersion < 3)
+            {
+                settings.SettingsVersion = 3;
+                migrated = true;
+            }
+
+            if (migratedFromPlaintext || migrated || recovered)
             {
                 Save(settings);
             }
+
+            LastRecoveryMessage = recoveryMessage;
 
             return settings;
         }
@@ -141,7 +156,7 @@ public class SettingsService
     {
         return new AppSettings
         {
-            SettingsVersion = 2,
+            SettingsVersion = 3,
             HotkeyModifiers = settings.HotkeyModifiers,
             HotkeyKey = settings.HotkeyKey,
             ActiveProvider = settings.ActiveProvider,
@@ -164,7 +179,59 @@ public class SettingsService
                 Icon = a.Icon
             }).ToList(),
             StartWithWindows = settings.StartWithWindows,
-            Theme = settings.Theme
+            Theme = settings.Theme,
+            Language = settings.Language,
+            SafeReplacePreviewMode = settings.SafeReplacePreviewMode,
+            EnableDiagnosticsBundle = settings.EnableDiagnosticsBundle
         };
+    }
+
+    private static bool ValidateAndRepair(AppSettings settings, out string? recoveryMessage)
+    {
+        var recovered = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(settings.HotkeyModifiers))
+        {
+            settings.HotkeyModifiers = "Ctrl+Shift";
+            recovered.Add("hotkey modifiers");
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.HotkeyKey))
+        {
+            settings.HotkeyKey = "Space";
+            recovered.Add("hotkey key");
+        }
+
+        if (settings.ActiveProvider != "OpenRouter" && settings.ActiveProvider != "Groq")
+        {
+            settings.ActiveProvider = "OpenRouter";
+            recovered.Add("AI provider");
+        }
+
+        settings.CustomActions ??= new List<CustomAction>();
+
+        var language = settings.Language?.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(language) || (language != "en" && language != "es"))
+        {
+            settings.Language = "en";
+            recovered.Add("language");
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.Theme))
+        {
+            settings.Theme = "Dark";
+            recovered.Add("theme");
+        }
+
+        settings.SettingsVersion = Math.Max(settings.SettingsVersion, 3);
+
+        if (recovered.Count == 0)
+        {
+            recoveryMessage = null;
+            return false;
+        }
+
+        recoveryMessage = $"Recovered invalid settings: {string.Join(", ", recovered)}.";
+        return true;
     }
 }

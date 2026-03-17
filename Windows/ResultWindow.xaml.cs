@@ -35,6 +35,7 @@ public partial class ResultWindow : Window
 
     // Developer analytics
     private readonly AnalyticsService _analyticsService;
+    private readonly DiagnosticsService? _diagnosticsService;
 
     // Action IDs where a before/after diff is meaningful
     private static readonly HashSet<string> DiffEligibleActions = new()
@@ -48,13 +49,15 @@ public partial class ResultWindow : Window
         TextCaptureService textCapture,
         SettingsService settingsService,
         HistoryService historyService,
-        AnalyticsService analyticsService)
+        AnalyticsService analyticsService,
+        DiagnosticsService? diagnosticsService = null)
     {
         _aiService = aiService;
         _textCapture = textCapture;
         _settingsService = settingsService;
         _historyService = historyService;
         _analyticsService = analyticsService;
+        _diagnosticsService = diagnosticsService;
         _textSanitizationService = new TextSanitizationService();
 
         InitializeComponent();
@@ -123,6 +126,7 @@ public partial class ResultWindow : Window
 
     private async Task ProcessAsync(ActionItem action, string selectedText)
     {
+        var correlationId = _diagnosticsService?.NewCorrelationId() ?? Guid.NewGuid().ToString("N");
         _cts = new CancellationTokenSource();
         bool firstToken = true;
         EnsureUiFlushTimer();
@@ -220,6 +224,12 @@ public partial class ResultWindow : Window
         {
             _uiFlushTimer?.Stop();
             _analyticsService.TrackActionError(action.Id, action.IsBuiltIn, ex.GetType().Name, provider);
+            _diagnosticsService?.ReportHandledError("ResultWindow.ProcessAsync", ex, correlationId,
+                new Dictionary<string, string>
+                {
+                    ["action_id"] = action.Id,
+                    ["provider"] = provider
+                });
             Dispatcher.Invoke(() =>
             {
                 FlushPendingUiBuffer();
@@ -254,12 +264,56 @@ public partial class ResultWindow : Window
     private void ReplaceButton_Click(object sender, RoutedEventArgs e)
     {
         var text = _resultText;
+
+        var validation = _textCapture.ValidateReplaceTarget();
+        var settings = _settingsService.Load();
+        bool forceReplace = false;
+
+        if (!validation.IsSafe)
+        {
+            var decision = MessageBox.Show(
+                "Focus changed since capture.\n\n" +
+                $"Captured in: {validation.SourceProcessName}\n" +
+                $"Current app: {validation.CurrentProcessName}\n\n" +
+                "Yes = Replace anyway\nNo = Copy only\nCancel = Abort",
+                "Unsafe Replace Detected",
+                MessageBoxButton.YesNoCancel,
+                MessageBoxImage.Warning);
+
+            if (decision == MessageBoxResult.Cancel)
+                return;
+
+            if (decision == MessageBoxResult.No)
+            {
+                Clipboard.SetText(text);
+                AnimateClose(showCopied: true);
+                return;
+            }
+
+            forceReplace = true;
+        }
+
+        if (settings.SafeReplacePreviewMode)
+        {
+            var preview = text.Length > 220 ? text[..220] + "..." : text;
+            var previewDecision = MessageBox.Show(
+                $"Safe Preview:\n\n{preview}\n\nReplace selected text in {validation.CurrentProcessName}?",
+                "Confirm Replace",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (previewDecision != MessageBoxResult.Yes)
+                return;
+        }
+
         AnimateClose(onComplete: async () =>
         {
             try
             {
                 await Task.Delay(150); // allow window to fully close & source app to regain focus
-                await _textCapture.ReplaceSelectedTextAsync(text);
+                bool replaced = await _textCapture.ReplaceSelectedTextSafelyAsync(text, forceReplace);
+                if (!replaced)
+                    Clipboard.SetText(text);
             }
             catch { /* clipboard or focus errors — replacement already attempted, ignore */ }
         });
@@ -399,17 +453,7 @@ public partial class ResultWindow : Window
     // ── Window animations ────────────────────────────────────
     private void AnimateOpen()
     {
-        var dur = new Duration(TimeSpan.FromMilliseconds(220));
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-
-        RootBorder.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, dur) { EasingFunction = ease });
-
-        var scaleAnim = new DoubleAnimation(0.94, 1.0, dur) { EasingFunction = ease };
-        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleAnim);
-        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleAnim);
-
-        TranslateT.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty,
-            new DoubleAnimation(-10, 0, dur) { EasingFunction = ease });
+        WindowGpuAnimationService.AnimateOpen(RootBorder, ScaleT, 0.94, TranslateT, -10, 220);
     }
 
     private void AnimateClose(bool showCopied = false, Action? onComplete = null)

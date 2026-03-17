@@ -9,11 +9,15 @@ namespace Scriptly.Windows;
 public partial class HistoryWindow : Window
 {
     private readonly HistoryService _historyService;
+    private readonly LocalizationService _loc;
 
     public HistoryWindow(HistoryService historyService)
     {
         _historyService = historyService;
+        var settings = new SettingsService().Load();
+        _loc = new LocalizationService(settings.Language);
         InitializeComponent();
+        ApplyLocalization();
 
         // Live-update the list if the window is already visible when a result finishes
         _historyService.Changed += () =>
@@ -65,12 +69,12 @@ public partial class HistoryWindow : Window
         {
             Clipboard.SetText(entry.Result);
 
-            FooterHint.Text = "✓ Copied to clipboard";
+            FooterHint.Text = _loc.T("history.copied", "✓ Copied to clipboard");
             var timer = new System.Windows.Threading.DispatcherTimer
             {
                 Interval = TimeSpan.FromSeconds(2)
             };
-            timer.Tick += (_, _) => { FooterHint.Text = "Click Copy on any entry to copy the result"; timer.Stop(); };
+            timer.Tick += (_, _) => { FooterHint.Text = _loc.T("history.footerHint", "Click Copy on any entry to copy the result"); timer.Stop(); };
             timer.Start();
         }
     }
@@ -98,18 +102,7 @@ public partial class HistoryWindow : Window
 
     private void AnimateOpen()
     {
-        var dur  = new Duration(TimeSpan.FromMilliseconds(220));
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-
-        RootBorder.BeginAnimation(OpacityProperty,
-            new DoubleAnimation(0, 1, dur) { EasingFunction = ease });
-
-        var scaleAnim = new DoubleAnimation(0.94, 1.0, dur) { EasingFunction = ease };
-        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleAnim);
-        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleAnim);
-
-        TranslateT.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty,
-            new DoubleAnimation(-10, 0, dur) { EasingFunction = ease });
+        WindowGpuAnimationService.AnimateOpen(RootBorder, ScaleT, 0.94, TranslateT, -10, 220);
     }
 
     private void AnimateClose()
@@ -126,5 +119,14 @@ public partial class HistoryWindow : Window
         var scaleAnim = new DoubleAnimation(1.0, 0.95, dur) { EasingFunction = ease };
         ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleAnim);
         ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleAnim);
+    }
+
+    private void ApplyLocalization()
+    {
+        HistoryTitleText.Text = _loc.T("history.title", "History");
+        ClearAllButton.Content = _loc.T("history.clearAll", "Clear all");
+        NoHistoryText.Text = _loc.T("history.emptyTitle", "No history yet");
+        NoHistoryHintText.Text = _loc.T("history.emptyHint", "Processed results will appear here");
+        FooterHint.Text = _loc.T("history.footerHint", "Click Copy on any entry to copy the result");
     }
 }

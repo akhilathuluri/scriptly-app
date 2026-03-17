@@ -264,21 +264,7 @@ public partial class ActionPanelWindow : Window
     // ── Animations ──────────────────────────────────────────
     private void AnimateOpen()
     {
-        var dur = new Duration(TimeSpan.FromMilliseconds(200));
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-
-        // Opacity
-        var opacityAnim = new DoubleAnimation(0, 1, dur) { EasingFunction = ease };
-        RootBorder.BeginAnimation(OpacityProperty, opacityAnim);
-
-        // Scale
-        var scaleAnim = new DoubleAnimation(0.92, 1.0, dur) { EasingFunction = ease };
-        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleAnim);
-        ScaleT.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleAnim);
-
-        // Translate
-        var transAnim = new DoubleAnimation(8, 0, dur) { EasingFunction = ease };
-        TranslateT.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, transAnim);
+        WindowGpuAnimationService.AnimateOpen(RootBorder, ScaleT, 0.92, TranslateT, 8);
     }
 
     private void AnimateClose(Action? onComplete = null)
