@@ -270,27 +270,34 @@ public partial class ResultWindow : Window
         bool forceReplace = false;
         bool isScriptlyForeground = validation.CurrentProcessName.Equals("Scriptly", StringComparison.OrdinalIgnoreCase);
 
-        if (!validation.IsSafe && !isScriptlyForeground)
+        if (!validation.IsSafe && !isScriptlyForeground && ReplacePromptPreferenceService.ShouldShowUnsafePrompt())
         {
-            var decision = MessageBox.Show(
-                "Focus changed since capture.\n\n" +
-                $"Captured in: {validation.SourceProcessName}\n" +
-                $"Current app: {validation.CurrentProcessName}\n\n" +
-                "Yes = Replace anyway\nNo = Copy only\nCancel = Abort",
-                "Unsafe Replace Detected",
-                MessageBoxButton.YesNoCancel,
-                MessageBoxImage.Warning);
+            var dialog = new UnsafeReplaceDialog(
+                validation.SourceProcessName,
+                validation.CurrentProcessName,
+                allowCancel: true)
+            {
+                Owner = this
+            };
 
-            if (decision == MessageBoxResult.Cancel)
+            dialog.ShowDialog();
+            if (dialog.DontAskAgainForSession)
+                ReplacePromptPreferenceService.SuppressUnsafePromptForSession();
+
+            if (dialog.Decision == UnsafeReplaceDecision.Cancel)
                 return;
 
-            if (decision == MessageBoxResult.No)
+            if (dialog.Decision == UnsafeReplaceDecision.CopyOnly)
             {
                 Clipboard.SetText(text);
                 AnimateClose(showCopied: true);
                 return;
             }
 
+            forceReplace = true;
+        }
+        else if (!validation.IsSafe && !isScriptlyForeground && !ReplacePromptPreferenceService.ShouldShowUnsafePrompt())
+        {
             forceReplace = true;
         }
 
@@ -316,16 +323,25 @@ public partial class ResultWindow : Window
                 if (!replaced)
                 {
                     var postValidation = _textCapture.ValidateReplaceTarget();
-                    var decision = MessageBox.Show(
-                        "Focus changed since capture.\n\n" +
-                        $"Captured in: {postValidation.SourceProcessName}\n" +
-                        $"Current app: {postValidation.CurrentProcessName}\n\n" +
-                        "Yes = Replace anyway\nNo = Copy only",
-                        "Unsafe Replace Detected",
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Warning);
+                    if (!ReplacePromptPreferenceService.ShouldShowUnsafePrompt())
+                    {
+                        await _textCapture.ReplaceSelectedTextSafelyAsync(text, force: true);
+                        return;
+                    }
 
-                    if (decision == MessageBoxResult.Yes)
+                    var dialog = new UnsafeReplaceDialog(
+                        postValidation.SourceProcessName,
+                        postValidation.CurrentProcessName,
+                        allowCancel: false)
+                    {
+                        Owner = this
+                    };
+
+                    dialog.ShowDialog();
+                    if (dialog.DontAskAgainForSession)
+                        ReplacePromptPreferenceService.SuppressUnsafePromptForSession();
+
+                    if (dialog.Decision == UnsafeReplaceDecision.ReplaceAnyway)
                     {
                         await _textCapture.ReplaceSelectedTextSafelyAsync(text, force: true);
                         return;

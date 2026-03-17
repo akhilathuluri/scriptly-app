@@ -1,0 +1,107 @@
+<Window x:Class="Scriptly.Windows.UnsafeReplaceDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Unsafe Replace Detected"
+        Width="440"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        SnapsToDevicePixels="True"
+        UseLayoutRounding="True">
+
+    <Window.CacheMode>
+        <BitmapCache EnableClearType="True" SnapsToDevicePixels="True"/>
+    </Window.CacheMode>
+
+    <Border x:Name="RootBorder"
+            Background="#16161E"
+            CornerRadius="12"
+            Padding="16"
+            Opacity="0"
+            RenderTransformOrigin="0.5,0.5">
+
+        <Border.RenderTransform>
+            <TransformGroup>
+                <ScaleTransform x:Name="ScaleT" ScaleX="0.94" ScaleY="0.94"/>
+                <TranslateTransform x:Name="TranslateT" Y="8"/>
+            </TransformGroup>
+        </Border.RenderTransform>
+
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="30" ShadowDepth="0" Color="#000000" Opacity="0.65"/>
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0"
+                       Text="Unsafe Replace Detected"
+                       FontSize="15"
+                       FontWeight="SemiBold"
+                       Foreground="#E0E0F0"
+                       Margin="0,0,0,10"/>
+
+            <TextBlock Grid.Row="1"
+                       x:Name="DetailsText"
+                       TextWrapping="Wrap"
+                       Foreground="#B8B8D8"
+                       FontSize="12.5"
+                       Margin="0,0,0,12"/>
+
+            <CheckBox Grid.Row="2"
+                      x:Name="DontAskAgainCheck"
+                      Content="Don't ask again for this session"
+                      Foreground="#A0A0C8"
+                      FontSize="12"
+                      Margin="0,0,0,14"/>
+
+            <Grid Grid.Row="3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="8"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="8"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Button Grid.Column="1"
+                        Content="Replace anyway"
+                        Click="ReplaceAnyway_Click"
+                        Background="#5A4AF7"
+                        Foreground="White"
+                        Padding="14,7"
+                        BorderThickness="0"
+                        Cursor="Hand"/>
+
+                <Button Grid.Column="3"
+                        Content="Copy only"
+                        Click="CopyOnly_Click"
+                        Background="#222234"
+                        Foreground="#C0C0E0"
+                        Padding="14,7"
+                        BorderThickness="0"
+                        Cursor="Hand"/>
+
+                <Button Grid.Column="5"
+                        x:Name="CancelButton"
+                        Content="Cancel"
+                        Click="Cancel_Click"
+                        Background="#1B1B2B"
+                        Foreground="#9A9ABC"
+                        Padding="14,7"
+                        BorderThickness="0"
+                        Cursor="Hand"/>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>
