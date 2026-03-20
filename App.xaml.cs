@@ -16,6 +16,7 @@ public partial class App : Application
     private HistoryService? _historyService;
     private AnalyticsService? _analyticsService;
     private DiagnosticsService? _diagnosticsService;
+    private UpdateNotificationService? _updateService;
     private System.Threading.Mutex? _mutex; // kept alive for the process lifetime
 
     // Hotkey debounce: prevent rapid repeated presses from spawning multiple windows
@@ -30,6 +31,10 @@ public partial class App : Application
     private ResultWindow? _resultWindow;
     private HistoryWindow? _historyWindow;
     private MoreInfoWindow? _moreInfoWindow;
+    private UpdatesWindow? _updatesWindow;
+    private AppUpdateInfo? _latestUpdateInfo;
+    private string? _lastNotifiedUpdateVersion;
+    private System.Windows.Threading.DispatcherTimer? _updateCheckTimer;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -54,6 +59,7 @@ public partial class App : Application
         _aiService = new AiService(_settingsService);
         _textCapture = new TextCaptureService();
         _historyService = new HistoryService();
+        _updateService = new UpdateNotificationService();
 
         // Analytics — developer-only, silently disabled if API key is not set
         _analyticsService = new AnalyticsService();
@@ -68,6 +74,7 @@ public partial class App : Application
         _trayService = new TrayService();
         _trayService.OpenSettingsRequested += OpenSettings;
         _trayService.OpenHistoryRequested  += OpenHistory;
+        _trayService.OpenUpdatesRequested += OpenUpdates;
         _trayService.OpenMoreInfoRequested += OpenMoreInfo;
         _trayService.ExitRequested += () => Shutdown();
         _trayService.Initialize();
@@ -99,6 +106,8 @@ public partial class App : Application
         _actionPanel  = new ActionPanelWindow(_actionsService, _aiService, _textCapture, _settingsService, _resultWindow);
         _historyWindow = new HistoryWindow(_historyService!);
         _moreInfoWindow = new MoreInfoWindow(DeveloperInfo.Default);
+        _updatesWindow = new UpdatesWindow();
+        _updatesWindow.RefreshRequested += OnRefreshUpdatesRequested;
 
         // Show balloon on first start or if no API key set
         if (string.IsNullOrWhiteSpace(settings.OpenRouter.ApiKey) && string.IsNullOrWhiteSpace(settings.Groq.ApiKey))
@@ -116,6 +125,64 @@ public partial class App : Application
         {
             _trayService.ShowBalloon("Scriptly settings recovered", _settingsService.LastRecoveryMessage!);
         }
+
+        _ = CheckForUpdatesAsync(showUpToDateBalloon: false);
+        StartUpdateCheckTimer();
+    }
+
+    private void StartUpdateCheckTimer()
+    {
+        _updateCheckTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromHours(6)
+        };
+
+        _updateCheckTimer.Tick += async (_, _) => await CheckForUpdatesAsync(showUpToDateBalloon: false);
+        _updateCheckTimer.Start();
+    }
+
+    private async Task CheckForUpdatesAsync(bool showUpToDateBalloon)
+    {
+        if (_updateService is null || _trayService is null)
+            return;
+
+        var info = await _updateService.CheckForUpdateAsync();
+        _latestUpdateInfo = info;
+        _updatesWindow?.SetUpdateInfo(info);
+
+        if (info is null)
+            return;
+
+        if (info.IsUpdateAvailable)
+        {
+            _trayService.SetUpdatesAvailable(info.LatestVersion, info.IsRequiredUpdate);
+
+            if (!string.Equals(_lastNotifiedUpdateVersion, info.LatestVersion, StringComparison.OrdinalIgnoreCase))
+            {
+                _lastNotifiedUpdateVersion = info.LatestVersion;
+                _trayService.ShowBalloon(
+                    "Scriptly update available",
+                    $"Version {info.LatestVersion} is available. Right-click tray icon and open Updates.");
+            }
+        }
+        else
+        {
+            _trayService.ClearUpdatesAvailable();
+
+            if (showUpToDateBalloon)
+            {
+                _trayService.ShowBalloon("Scriptly", "You are already on the latest version.");
+            }
+        }
+    }
+
+    private async void OnRefreshUpdatesRequested()
+    {
+        if (_updatesWindow is null)
+            return;
+
+        _updatesWindow.SetCheckingState();
+        await CheckForUpdatesAsync(showUpToDateBalloon: true);
     }
 
     private async void OnHotkeyPressed()
@@ -196,6 +263,11 @@ public partial class App : Application
         // Ensure history is persisted before exit
         _historyService?.PersistSync();
 
+        if (_updatesWindow is not null)
+            _updatesWindow.RefreshRequested -= OnRefreshUpdatesRequested;
+
+        _updateCheckTimer?.Stop();
+
         _hotkeyService?.Dispose();
         _trayService?.Dispose();
         _analyticsService?.Dispose();
@@ -247,6 +319,31 @@ public partial class App : Application
             }
 
             _moreInfoWindow.ShowPanel();
+        });
+    }
+
+    private void OpenUpdates()
+    {
+        Dispatcher.Invoke(() =>
+        {
+            if (_updatesWindow is null)
+                return;
+
+            if (_updatesWindow.IsVisible)
+            {
+                _updatesWindow.Activate();
+                return;
+            }
+
+            if (_latestUpdateInfo is null)
+                _updatesWindow.SetCheckingState();
+            else
+                _updatesWindow.SetUpdateInfo(_latestUpdateInfo);
+
+            _updatesWindow.ShowPanel();
+
+            if (_latestUpdateInfo is null)
+                _ = CheckForUpdatesAsync(showUpToDateBalloon: false);
         });
     }
 }

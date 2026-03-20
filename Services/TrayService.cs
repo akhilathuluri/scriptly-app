@@ -12,9 +12,11 @@ public class TrayService : IDisposable
 {
     private NotifyIcon? _notifyIcon;
     private ContextMenuStrip? _contextMenu;
+    private ToolStripMenuItem? _updatesItem;
 
     public event Action? OpenSettingsRequested;
     public event Action? OpenHistoryRequested;
+    public event Action? OpenUpdatesRequested;
     public event Action? OpenMoreInfoRequested;
     public event Action? ExitRequested;
 
@@ -42,6 +44,13 @@ public class TrayService : IDisposable
         settingsItem.Click += (_, _) => OpenSettingsRequested?.Invoke();
         _contextMenu.Items.Add(settingsItem);
 
+        _updatesItem = new ToolStripMenuItem("⬆  Updates Available")
+        {
+            Visible = false
+        };
+        _updatesItem.Click += (_, _) => OpenUpdatesRequested?.Invoke();
+        _contextMenu.Items.Add(_updatesItem);
+
         var moreInfoItem = new ToolStripMenuItem("ℹ  More Info");
         moreInfoItem.Click += (_, _) => OpenMoreInfoRequested?.Invoke();
         _contextMenu.Items.Add(moreInfoItem);
@@ -66,6 +75,24 @@ public class TrayService : IDisposable
     public void ShowBalloon(string title, string message, ToolTipIcon icon = ToolTipIcon.Info)
     {
         _notifyIcon?.ShowBalloonTip(3000, title, message, icon);
+    }
+
+    public void SetUpdatesAvailable(string latestVersion, bool isRequired)
+    {
+        if (_updatesItem is null)
+            return;
+
+        var requiredSuffix = isRequired ? " - Required" : string.Empty;
+        _updatesItem.Text = $"⬆  Updates Available ({latestVersion}){requiredSuffix}";
+        _updatesItem.Visible = true;
+    }
+
+    public void ClearUpdatesAvailable()
+    {
+        if (_updatesItem is null)
+            return;
+
+        _updatesItem.Visible = false;
     }
 
     private static Icon CreateIcon()
