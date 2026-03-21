@@ -6,6 +6,7 @@ namespace Scriptly.Windows;
 
 public partial class CustomActionDialog : Window
 {
+    private readonly IconService _iconService = new();
     public CustomAction? Result { get; private set; }
     private readonly Guid _existingId;
 
@@ -16,7 +17,7 @@ public partial class CustomActionDialog : Window
         if (existing != null)
         {
             _existingId = existing.Id;
-            IconBox.Text = existing.Icon;
+            IconBox.Text = _iconService.NormalizeCustomActionIcon(existing.Icon);
             NameBox.Text = existing.Name;
             DescBox.Text = existing.Description;
             InstructionsBox.Text = existing.Instructions;
@@ -24,6 +25,7 @@ public partial class CustomActionDialog : Window
         else
         {
             _existingId = Guid.NewGuid();
+            IconBox.Text = _iconService.GetGlyph(IconKey.CustomAction);
         }
 
         Loaded += OnLoaded;
@@ -46,7 +48,7 @@ public partial class CustomActionDialog : Window
         Result = new CustomAction
         {
             Id = _existingId,
-            Icon = string.IsNullOrWhiteSpace(IconBox.Text) ? "✨" : IconBox.Text.Trim(),
+            Icon = _iconService.NormalizeCustomActionIcon(IconBox.Text),
             Name = NameBox.Text.Trim(),
             Description = DescBox.Text.Trim(),
             Instructions = InstructionsBox.Text.Trim()

@@ -46,7 +46,7 @@ public class ActionsService
                 Id = custom.Id.ToString(),
                 Name = custom.Name,
                 Description = custom.Description,
-                Icon = custom.Icon,
+                Icon = _iconService.NormalizeCustomActionIcon(custom.Icon),
                 Shortcut = "",
                 Prompt = custom.Instructions,
                 IsBuiltIn = false

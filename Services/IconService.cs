@@ -6,6 +6,7 @@ namespace Scriptly.Services;
 
 public enum IconKey
 {
+    CustomAction,
     History,
     Settings,
     Updates,
@@ -31,6 +32,7 @@ public sealed class IconService
 {
     private static readonly IReadOnlyDictionary<IconKey, string> Glyphs = new Dictionary<IconKey, string>
     {
+        [IconKey.CustomAction] = "\uE710",
         [IconKey.History] = "\uE81C",
         [IconKey.Settings] = "\uE713",
         [IconKey.Updates] = "\uE895",
@@ -84,14 +86,30 @@ public sealed class IconService
         return string.IsNullOrWhiteSpace(glyph) ? fallback : glyph;
     }
 
+    public string NormalizeCustomActionIcon(string? icon)
+    {
+        var candidate = (icon ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(candidate))
+            return GetGlyph(IconKey.CustomAction);
+
+        // Keep only Fluent/MDL-style private-use glyphs; normalize everything else.
+        var first = candidate[0];
+        var isPrivateUse = first >= '\uE000' && first <= '\uF8FF';
+        return isPrivateUse ? first.ToString() : GetGlyph(IconKey.CustomAction);
+    }
+
     public Bitmap CreateMenuImage(IconKey key, int size = 16)
     {
-        var bmp = new Bitmap(size, size);
+        var dpiScale = GetSystemDpiScale();
+        var pixelSize = Math.Max(size, (int)Math.Round(size * dpiScale));
+
+        var bmp = new Bitmap(pixelSize, pixelSize);
         using var g = Graphics.FromImage(bmp);
         g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
         g.Clear(Color.Transparent);
 
-        DrawMenuSymbol(g, key, size, Color.FromArgb(205, 205, 230));
+        DrawMenuSymbol(g, key, pixelSize, Color.FromArgb(205, 205, 230));
 
         return bmp;
     }
@@ -130,14 +148,16 @@ public sealed class IconService
 
     private static void DrawMenuSymbol(Graphics g, IconKey key, int size, Color color)
     {
-        using var pen = new Pen(color, 1.6f)
+        var stroke = Math.Max(1.6f, size / 10f);
+        using var pen = new Pen(color, stroke)
         {
             StartCap = LineCap.Round,
-            EndCap = LineCap.Round
+            EndCap = LineCap.Round,
+            Alignment = PenAlignment.Inset
         };
         using var fill = new SolidBrush(color);
 
-        var inset = 2f;
+        var inset = Math.Max(2f, size * 0.14f);
         var rect = new RectangleF(inset, inset, size - (inset * 2), size - (inset * 2));
 
         switch (key)
@@ -190,6 +210,23 @@ public sealed class IconService
             default:
                 g.FillEllipse(fill, size * 0.38f, size * 0.38f, size * 0.24f, size * 0.24f);
                 break;
+        }
+    }
+
+    private static float GetSystemDpiScale()
+    {
+        try
+        {
+            using var g = Graphics.FromHwnd(IntPtr.Zero);
+            var scale = g.DpiX / 96f;
+            if (float.IsNaN(scale) || float.IsInfinity(scale) || scale <= 0)
+                return 1f;
+
+            return scale;
+        }
+        catch
+        {
+            return 1f;
         }
     }
 

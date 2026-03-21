@@ -68,9 +68,10 @@
             <TextBlock Text="Custom Action" FontSize="16" FontWeight="SemiBold"
                        Foreground="#E0E0F0" Margin="0,0,0,18"/>
 
-            <TextBlock Text="Icon (emoji)" Style="{StaticResource LabelStyle}"/>
+            <TextBlock Text="Icon (symbol)" Style="{StaticResource LabelStyle}"/>
             <TextBox x:Name="IconBox" Style="{StaticResource InputStyle}"
-                     Text="✨" Margin="0,0,0,12" Width="60"
+                     Margin="0,0,0,12" Width="60"
+                     FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI Emoji, Segoe UI"
                      HorizontalAlignment="Left"/>
 
             <TextBlock Text="Name" Style="{StaticResource LabelStyle}"/>
