@@ -5,6 +5,7 @@ namespace Scriptly.Services;
 public class ActionsService
 {
     private readonly SettingsService _settingsService;
+    private readonly IconService _iconService = new();
     private AppSettings? _settingsCache;
 
     // Called by App.xaml.cs after the user saves settings, so the next
@@ -51,6 +52,10 @@ public class ActionsService
                 IsBuiltIn = false
             });
         }
+
+        // Keep icon selection centralized for all built-in actions.
+        foreach (var action in all.Where(a => a.IsBuiltIn))
+            action.Icon = _iconService.GetActionGlyph(action.Id, action.Icon);
 
         return all;
     }

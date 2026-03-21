@@ -25,6 +25,7 @@ public class StringToVisibilityConverter : MarkupExtension, System.Windows.Data.
 
 public partial class ActionPanelWindow : Window
 {
+    private readonly IconService _iconService = new();
     private readonly ActionsService _actionsService;
     private readonly AiService _aiService;
     private readonly TextCaptureService _textCapture;
@@ -51,6 +52,7 @@ public partial class ActionPanelWindow : Window
         _resultWindow = resultWindow;
 
         InitializeComponent();
+        SearchIconText.Text = _iconService.GetGlyph(IconKey.Search);
 
         // Only close on deactivation after the guard period has elapsed
         Deactivated += (_, _) => { if (_allowDeactivateClose) AnimateClose(); };

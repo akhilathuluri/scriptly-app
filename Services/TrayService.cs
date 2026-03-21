@@ -1,5 +1,4 @@
 using System.Drawing;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace Scriptly.Services;
@@ -10,6 +9,7 @@ namespace Scriptly.Services;
 /// </summary>
 public class TrayService : IDisposable
 {
+    private readonly IconService _iconService = new();
     private NotifyIcon? _notifyIcon;
     private ContextMenuStrip? _contextMenu;
     private ToolStripMenuItem? _updatesItem;
@@ -36,28 +36,41 @@ public class TrayService : IDisposable
         _contextMenu.Items.Add(titleItem);
         _contextMenu.Items.Add(new ToolStripSeparator());
 
-        var historyItem = new ToolStripMenuItem("📋  History");
+        var historyItem = new ToolStripMenuItem("History")
+        {
+            Image = _iconService.CreateMenuImage(IconKey.History)
+        };
         historyItem.Click += (_, _) => OpenHistoryRequested?.Invoke();
         _contextMenu.Items.Add(historyItem);
 
-        var settingsItem = new ToolStripMenuItem("⚙  Settings");
+        var settingsItem = new ToolStripMenuItem("Settings")
+        {
+            Image = _iconService.CreateMenuImage(IconKey.Settings)
+        };
         settingsItem.Click += (_, _) => OpenSettingsRequested?.Invoke();
         _contextMenu.Items.Add(settingsItem);
 
-        _updatesItem = new ToolStripMenuItem("⬆  Updates Available")
+        _updatesItem = new ToolStripMenuItem("Updates Available")
         {
+            Image = _iconService.CreateMenuImage(IconKey.Updates),
             Visible = false
         };
         _updatesItem.Click += (_, _) => OpenUpdatesRequested?.Invoke();
         _contextMenu.Items.Add(_updatesItem);
 
-        var moreInfoItem = new ToolStripMenuItem("ℹ  More Info");
+        var moreInfoItem = new ToolStripMenuItem("More Info")
+        {
+            Image = _iconService.CreateMenuImage(IconKey.MoreInfo)
+        };
         moreInfoItem.Click += (_, _) => OpenMoreInfoRequested?.Invoke();
         _contextMenu.Items.Add(moreInfoItem);
 
         _contextMenu.Items.Add(new ToolStripSeparator());
 
-        var exitItem = new ToolStripMenuItem("✕  Exit");
+        var exitItem = new ToolStripMenuItem("Exit")
+        {
+            Image = _iconService.CreateMenuImage(IconKey.Exit)
+        };
         exitItem.Click += (_, _) => ExitRequested?.Invoke();
         _contextMenu.Items.Add(exitItem);
 
@@ -66,7 +79,7 @@ public class TrayService : IDisposable
             Text = "Scriptly — Select text and press Ctrl+Shift+Space",
             Visible = true,
             ContextMenuStrip = _contextMenu,
-            Icon = CreateIcon()
+            Icon = _iconService.CreateAppTrayIcon()
         };
 
         _notifyIcon.DoubleClick += (_, _) => OpenSettingsRequested?.Invoke();
@@ -83,7 +96,7 @@ public class TrayService : IDisposable
             return;
 
         var requiredSuffix = isRequired ? " - Required" : string.Empty;
-        _updatesItem.Text = $"⬆  Updates Available ({latestVersion}){requiredSuffix}";
+        _updatesItem.Text = $"Updates Available ({latestVersion}){requiredSuffix}";
         _updatesItem.Visible = true;
     }
 
@@ -95,39 +108,9 @@ public class TrayService : IDisposable
         _updatesItem.Visible = false;
     }
 
-    private static Icon CreateIcon()
-    {
-        // Draw a simple "S" letter icon at 16x16 using GDI+
-        var bmp = new Bitmap(16, 16);
-        using var g = Graphics.FromImage(bmp);
-        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-        g.Clear(Color.Transparent);
-
-        // Background circle
-        using var bgBrush = new SolidBrush(Color.FromArgb(90, 74, 247));
-        g.FillEllipse(bgBrush, 0, 0, 15, 15);
-
-        // Letter "S"
-        using var font = new Font("Segoe UI", 8f, System.Drawing.FontStyle.Bold, GraphicsUnit.Point);
-        using var textBrush = new SolidBrush(Color.White);
-        var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-        g.DrawString("S", font, textBrush, new RectangleF(0, 0, 16, 16), sf);
-
-        // GetHicon() creates a GDI HICON that Icon.FromHandle does NOT own.
-        // Clone() produces an Icon that owns its handle; then we free the original HICON.
-        var hIcon = bmp.GetHicon();
-        var icon  = Icon.FromHandle(hIcon);
-        var owned = (Icon)icon.Clone();
-        DestroyIcon(hIcon);
-        return owned;
-    }
-
     public void Dispose()
     {
         _notifyIcon?.Dispose();
         _contextMenu?.Dispose();
     }
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool DestroyIcon(IntPtr hIcon);
 }

@@ -148,7 +148,8 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="🔍" FontSize="13" Margin="12,0,0,0"
+                    <TextBlock x:Name="SearchIconText" FontSize="13" Margin="12,0,0,0"
+                               FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI Emoji, Segoe UI"
                                VerticalAlignment="Center" Foreground="#5A5A7A"/>
                     <TextBox x:Name="SearchBox"
                              Grid.Column="1"
@@ -182,6 +183,7 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="{Binding Icon}" FontSize="15"
+                                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI Emoji, Segoe UI"
                                        VerticalAlignment="Center" HorizontalAlignment="Center"/>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="4,0">
                                 <TextBlock Text="{Binding Name}" FontSize="13.5"
