@@ -14,6 +14,7 @@ public enum IconKey
     Exit,
     Search,
     AskAi,
+    EnhancePrompt,
     FixGrammar,
     Summarize,
     Translate,
@@ -40,6 +41,7 @@ public sealed class IconService
         [IconKey.Exit] = "\uE8BB",
         [IconKey.Search] = "\uE721",
         [IconKey.AskAi] = "\uE8BD",
+        [IconKey.EnhancePrompt] = "\uE70F",
         [IconKey.FixGrammar] = "\uE70F",
         [IconKey.Summarize] = "\uE8A5",
         [IconKey.Translate] = "\uE774",
@@ -64,6 +66,7 @@ public sealed class IconService
         var key = actionId.ToLowerInvariant() switch
         {
             "ask_ai" => IconKey.AskAi,
+            "enhance_prompt" => IconKey.EnhancePrompt,
             "fix_grammar" => IconKey.FixGrammar,
             "summarize" => IconKey.Summarize,
             "translate" => IconKey.Translate,
