@@ -32,6 +32,7 @@ public partial class App : Application
     private HistoryWindow? _historyWindow;
     private MoreInfoWindow? _moreInfoWindow;
     private UpdatesWindow? _updatesWindow;
+    private SettingsWindow? _settingsWindow;
     private AppUpdateInfo? _latestUpdateInfo;
     private string? _lastNotifiedUpdateVersion;
     private System.Windows.Threading.DispatcherTimer? _updateCheckTimer;
@@ -240,6 +241,14 @@ public partial class App : Application
     {
         Dispatcher.Invoke(() =>
         {
+            if (_settingsWindow is { IsVisible: true })
+            {
+                _settingsWindow.Activate();
+                return;
+            }
+
+            _hotkeyService?.SetSuspended(true);
+
             var win = new SettingsWindow(_settingsService!, settings =>
             {
                 // Invalidate cached actions so new custom actions are picked up immediately
@@ -253,6 +262,14 @@ public partial class App : Application
                         "Another app may be using it. Try a different shortcut.",
                         System.Windows.Forms.ToolTipIcon.Warning);
             });
+
+            _settingsWindow = win;
+            win.Closed += (_, _) =>
+            {
+                _settingsWindow = null;
+                _hotkeyService?.SetSuspended(false);
+            };
+
             win.Show();
             win.Activate();
         });

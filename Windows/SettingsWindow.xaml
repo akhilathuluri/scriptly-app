@@ -338,14 +338,28 @@
                         <StackPanel Grid.Column="0">
                             <TextBlock x:Name="ModifiersLabelText" Text="Modifiers (e.g. Ctrl+Shift)" Style="{StaticResource LabelStyle}"/>
                             <TextBox x:Name="HotkeyModifiers" Style="{StaticResource InputStyle}"
+                                     IsReadOnly="True"
                                      ToolTip="Ctrl, Shift, Alt, Win - combine with +"/>
                         </StackPanel>
                         <StackPanel Grid.Column="2">
                             <TextBlock x:Name="KeyLabelText" Text="Key (e.g. Space)" Style="{StaticResource LabelStyle}"/>
                             <TextBox x:Name="HotkeyKey" Style="{StaticResource InputStyle}"
+                                     IsReadOnly="True"
                                      ToolTip="Any keyboard key name"/>
                         </StackPanel>
                     </Grid>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                        <Button x:Name="RecordHotkeyButton"
+                                Content="Record Shortcut"
+                                Style="{StaticResource SecondaryButton}"
+                                Click="RecordHotkeyButton_Click"
+                                Margin="0,0,8,0"/>
+                        <Button x:Name="ClearHotkeyButton"
+                                Content="Clear"
+                                Style="{StaticResource SecondaryButton}"
+                                Click="ClearHotkeyButton_Click"/>
+                    </StackPanel>
 
                     <!-- ── General ── -->
                     <TextBlock x:Name="GeneralHeaderText" Text="GENERAL" Style="{StaticResource SectionHeader}"/>

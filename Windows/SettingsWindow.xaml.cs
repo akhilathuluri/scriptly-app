@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media.Animation;
+using System.Runtime.InteropServices;
 using Scriptly.Models;
 using Scriptly.Services;
 
@@ -9,10 +10,17 @@ namespace Scriptly.Windows;
 
 public partial class SettingsWindow : Window
 {
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
+
+    private const int VK_LWIN = 0x5B;
+    private const int VK_RWIN = 0x5C;
+
     private readonly SettingsService _settingsService;
     private readonly LocalizationService _loc;
     private AppSettings _settings;
     private Action<AppSettings>? _onSaved;
+    private bool _isRecordingHotkey;
 
     public SettingsWindow(SettingsService settingsService, Action<AppSettings>? onSaved = null)
     {
@@ -45,6 +53,8 @@ public partial class SettingsWindow : Window
         // Hotkey
         HotkeyModifiers.Text = _settings.HotkeyModifiers;
         HotkeyKey.Text = _settings.HotkeyKey;
+        _isRecordingHotkey = false;
+        RecordHotkeyButton.Content = _loc.T("settings.recordShortcut", "Record Shortcut");
 
         // General
         StartWithWindowsCheck.IsChecked = StartupService.IsEnabled();
@@ -85,6 +95,12 @@ public partial class SettingsWindow : Window
         _settings.Groq.Model = GroqModelBox.Text.Trim();
         _settings.HotkeyModifiers = HotkeyModifiers.Text.Trim();
         _settings.HotkeyKey = HotkeyKey.Text.Trim();
+
+        if (string.IsNullOrWhiteSpace(_settings.HotkeyModifiers) || string.IsNullOrWhiteSpace(_settings.HotkeyKey))
+        {
+            StatusLabel.Text = _loc.T("settings.recordShortcutRequired", "Record a shortcut before saving.");
+            return;
+        }
 
         if (ProviderCombo.SelectedItem is ComboBoxItem item)
             _settings.ActiveProvider = item.Tag?.ToString() ?? "OpenRouter";
@@ -168,8 +184,77 @@ public partial class SettingsWindow : Window
             { UseShellExecute = true });
     }
 
+    private void RecordHotkeyButton_Click(object sender, RoutedEventArgs e)
+    {
+        _isRecordingHotkey = !_isRecordingHotkey;
+        RecordHotkeyButton.Content = _isRecordingHotkey
+            ? _loc.T("settings.recording", "Recording... Press shortcut")
+            : _loc.T("settings.recordShortcut", "Record Shortcut");
+
+        StatusLabel.Text = _isRecordingHotkey
+            ? _loc.T("settings.recordingHint", "Press the key combination you want to use.")
+            : string.Empty;
+    }
+
+    private void ClearHotkeyButton_Click(object sender, RoutedEventArgs e)
+    {
+        HotkeyModifiers.Text = string.Empty;
+        HotkeyKey.Text = string.Empty;
+        StatusLabel.Text = _loc.T("settings.shortcutCleared", "Shortcut cleared. Record a new one.");
+    }
+
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        if (!_isRecordingHotkey)
+        {
+            base.OnPreviewKeyDown(e);
+            return;
+        }
+
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (IsModifierKey(key))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        var modifiers = Keyboard.Modifiers;
+        var modifiersText = BuildModifiersText(modifiers, IsWindowsPressed());
+        if (string.IsNullOrWhiteSpace(modifiersText))
+        {
+            StatusLabel.Text = _loc.T("settings.shortcutNeedsModifier", "Use at least one modifier key (Ctrl, Shift, Alt, or Win).");
+            e.Handled = true;
+            return;
+        }
+
+        var keyText = NormalizeHotkeyKey(key);
+        if (string.IsNullOrWhiteSpace(keyText))
+        {
+            StatusLabel.Text = _loc.T("settings.shortcutUnsupportedKey", "Unsupported key. Try another key.");
+            e.Handled = true;
+            return;
+        }
+
+        HotkeyModifiers.Text = modifiersText;
+        HotkeyKey.Text = keyText;
+
+        _isRecordingHotkey = false;
+        RecordHotkeyButton.Content = _loc.T("settings.recordShortcut", "Record Shortcut");
+        StatusLabel.Text = _loc.T("settings.shortcutRecorded", "Shortcut recorded.");
+        e.Handled = true;
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if (_isRecordingHotkey && e.Key == Key.Escape)
+        {
+            _isRecordingHotkey = false;
+            RecordHotkeyButton.Content = _loc.T("settings.recordShortcut", "Record Shortcut");
+            StatusLabel.Text = _loc.T("settings.recordingCancelled", "Shortcut recording cancelled.");
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.Escape) { Close(); e.Handled = true; }
         base.OnKeyDown(e);
     }
@@ -202,7 +287,42 @@ public partial class SettingsWindow : Window
         EnableDiagnosticsBundleCheck.Content = _loc.T("settings.enableDiagnostics", "Enable diagnostic bundle generation (opt-in)");
         CustomActionsHeaderText.Text = _loc.T("settings.customActions", "CUSTOM ACTIONS");
         NewActionButton.Content = _loc.T("settings.newAction", "+ New Action");
+        RecordHotkeyButton.Content = _loc.T("settings.recordShortcut", "Record Shortcut");
+        ClearHotkeyButton.Content = _loc.T("settings.clearShortcut", "Clear");
         CancelButton.Content = _loc.T("common.cancel", "Cancel");
         SaveButton.Content = _loc.T("common.save", "Save");
+    }
+
+    private static bool IsModifierKey(Key key)
+    {
+        return key == Key.LeftCtrl || key == Key.RightCtrl ||
+               key == Key.LeftShift || key == Key.RightShift ||
+               key == Key.LeftAlt || key == Key.RightAlt ||
+               key == Key.LWin || key == Key.RWin;
+    }
+
+    private static string BuildModifiersText(ModifierKeys modifiers, bool windowsPressed)
+    {
+        var parts = new List<string>();
+        if (modifiers.HasFlag(ModifierKeys.Control)) parts.Add("Ctrl");
+        if (modifiers.HasFlag(ModifierKeys.Alt)) parts.Add("Alt");
+        if (modifiers.HasFlag(ModifierKeys.Shift)) parts.Add("Shift");
+        if (modifiers.HasFlag(ModifierKeys.Windows) || windowsPressed) parts.Add("Win");
+        return string.Join("+", parts);
+    }
+
+    private static bool IsWindowsPressed()
+    {
+        return GetAsyncKeyState(VK_LWIN) < 0 || GetAsyncKeyState(VK_RWIN) < 0;
+    }
+
+    private static string NormalizeHotkeyKey(Key key)
+    {
+        return key switch
+        {
+            Key.None => string.Empty,
+            Key.LeftCtrl or Key.RightCtrl or Key.LeftShift or Key.RightShift or Key.LeftAlt or Key.RightAlt or Key.LWin or Key.RWin => string.Empty,
+            _ => key.ToString()
+        };
     }
 }

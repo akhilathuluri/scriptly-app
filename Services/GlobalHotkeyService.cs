@@ -75,10 +75,18 @@ public class GlobalHotkeyService : IDisposable
     private uint   _targetVk;
     private bool   _needCtrl, _needShift, _needAlt, _needWin;
     private bool   _hotkeyDown;
+    private bool   _isSuspended;
 
     // ── Public API ───────────────────────────────────────────────────────────
 
     public void Initialize(Window helperWindow) { }  // kept for API compat — no longer needed
+
+    public void SetSuspended(bool suspended)
+    {
+        _isSuspended = suspended;
+        if (suspended)
+            _hotkeyDown = false;
+    }
 
     public bool Register(string modifiers, string key)
     {
@@ -118,6 +126,9 @@ public class GlobalHotkeyService : IDisposable
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
         if (nCode < 0)
+            return CallNextHookEx(_hookHandle, nCode, wParam, lParam);
+
+        if (_isSuspended)
             return CallNextHookEx(_hookHandle, nCode, wParam, lParam);
 
         var kb = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
