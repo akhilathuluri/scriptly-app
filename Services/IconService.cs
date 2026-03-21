@@ -98,6 +98,32 @@ public sealed class IconService
         return isPrivateUse ? first.ToString() : GetGlyph(IconKey.CustomAction);
     }
 
+    public IReadOnlyList<string> GetCustomActionPickerGlyphs()
+    {
+        var keys = new[]
+        {
+            IconKey.CustomAction,
+            IconKey.AskAi,
+            IconKey.Explain,
+            IconKey.Rewrite,
+            IconKey.FixGrammar,
+            IconKey.Summarize,
+            IconKey.Translate,
+            IconKey.BulletPoints,
+            IconKey.Improve,
+            IconKey.ExplainCode,
+            IconKey.ChangeTone,
+            IconKey.Expand,
+            IconKey.Shorten
+        };
+
+        return keys
+            .Select(GetGlyph)
+            .Where(g => !string.IsNullOrWhiteSpace(g))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
     public Bitmap CreateMenuImage(IconKey key, int size = 16)
     {
         var dpiScale = GetSystemDpiScale();

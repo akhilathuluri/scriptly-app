@@ -1,4 +1,6 @@
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using Scriptly.Models;
 using Scriptly.Services;
 
@@ -13,6 +15,7 @@ public partial class CustomActionDialog : Window
     public CustomActionDialog(CustomAction? existing = null)
     {
         InitializeComponent();
+        BuildIconPicker();
 
         if (existing != null)
         {
@@ -29,12 +32,61 @@ public partial class CustomActionDialog : Window
         }
 
         Loaded += OnLoaded;
+        IconBox.TextChanged += (_, _) => UpdatePickerSelection();
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         WindowGpuAnimationService.ResetOpenState(RootBorder, ScaleT, 0.94, TranslateT, 8);
         WindowGpuAnimationService.AnimateOpen(RootBorder, ScaleT, 0.94, TranslateT, 8);
+        UpdatePickerSelection();
+    }
+
+    private void BuildIconPicker()
+    {
+        IconPickerPanel.Children.Clear();
+
+        foreach (var glyph in _iconService.GetCustomActionPickerGlyphs())
+        {
+            var btn = new Button
+            {
+                Content = glyph,
+                Tag = glyph,
+                Style = (Style)FindResource("PickerButtonStyle")
+            };
+            btn.Click += IconPicker_Click;
+            IconPickerPanel.Children.Add(btn);
+        }
+    }
+
+    private void IconPicker_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not string glyph)
+            return;
+
+        IconBox.Text = glyph;
+    }
+
+    private void UpdatePickerSelection()
+    {
+        var selected = _iconService.NormalizeCustomActionIcon(IconBox.Text);
+
+        foreach (var child in IconPickerPanel.Children)
+        {
+            if (child is not Button btn || btn.Tag is not string glyph)
+                continue;
+
+            if (string.Equals(glyph, selected, StringComparison.Ordinal))
+            {
+                btn.BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(124, 106, 247));
+                btn.Background = new SolidColorBrush(System.Windows.Media.Color.FromRgb(35, 35, 58));
+            }
+            else
+            {
+                btn.ClearValue(BackgroundProperty);
+                btn.ClearValue(BorderBrushProperty);
+            }
+        }
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)

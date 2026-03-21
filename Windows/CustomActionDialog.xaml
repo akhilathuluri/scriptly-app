@@ -44,6 +44,36 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="PickerButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#1E1E2E"/>
+            <Setter Property="Foreground" Value="#D0D0F0"/>
+            <Setter Property="BorderBrush" Value="#2A2A42"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI Emoji, Segoe UI"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Width" Value="30"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Margin" Value="0,0,6,6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#5A4AF7"/>
+                                <Setter TargetName="Bd" Property="Background" Value="#23233A"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Border x:Name="RootBorder"
@@ -73,6 +103,9 @@
                      Margin="0,0,0,12" Width="60"
                      FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI Emoji, Segoe UI"
                      HorizontalAlignment="Left"/>
+
+            <TextBlock Text="Pick icon" Style="{StaticResource LabelStyle}"/>
+            <WrapPanel x:Name="IconPickerPanel" Margin="0,0,0,12"/>
 
             <TextBlock Text="Name" Style="{StaticResource LabelStyle}"/>
             <TextBox x:Name="NameBox" Style="{StaticResource InputStyle}" Margin="0,0,0,12"/>
