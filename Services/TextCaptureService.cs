@@ -109,13 +109,14 @@ public class TextCaptureService
         U = new InputUnion { ki = new KEYBDINPUT { wVk = vk, dwFlags = KEYEVENTF_KEYUP } }
     };
 
-    private static void SendCtrlKey(ushort key)
+    private static bool SendCtrlKey(ushort key)
     {
-        SendInput(4, new[] { KeyDown(VK_CONTROL), KeyDown(key), KeyUp(key), KeyUp(VK_CONTROL) },
-            Marshal.SizeOf<INPUT>());
+        return TrySendInput(
+            new[] { KeyDown(VK_CONTROL), KeyDown(key), KeyUp(key), KeyUp(VK_CONTROL) },
+            $"Ctrl+{key}");
     }
 
-    private static void ReleaseModifiers()
+    private static bool ReleaseModifiers()
     {
         var inputs = new[]
         {
@@ -125,7 +126,21 @@ public class TextCaptureService
             KeyUp(VK_RWIN),
             KeyUp(VK_CONTROL)
         };
-        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+        return TrySendInput(inputs, "ReleaseModifiers");
+    }
+
+    private static bool TrySendInput(INPUT[] inputs, string context)
+    {
+        if (inputs.Length == 0)
+            return true;
+
+        var sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+        if (sent == (uint)inputs.Length)
+            return true;
+
+        var error = Marshal.GetLastWin32Error();
+        LogCapture($"SendInput failed in {context}: sent {sent}/{inputs.Length}, win32={error}");
+        return false;
     }
 
     private static async Task<bool> WaitForModifiersReleasedAsync(int timeoutMs = 800)
@@ -216,8 +231,10 @@ public class TextCaptureService
             LastDiagnostics.LastStrategy = strategies[attempt].Name;
             LogCapture($"Capture attempt {attempt + 1}/{strategies.Count} using {strategies[attempt].Name}");
 
-            if (sourceWindow != IntPtr.Zero)
-                SetForegroundWindow(sourceWindow);
+            if (sourceWindow != IntPtr.Zero && !SetForegroundWindow(sourceWindow))
+            {
+                LogCapture($"SetForegroundWindow failed for 0x{sourceWindow.ToInt64():X}");
+            }
 
             await Task.Delay(attempt == 0 ? 12 : 45);
 
@@ -290,11 +307,15 @@ public class TextCaptureService
 
         strategies.Add(new CaptureStrategy("WM_COPY", () =>
         {
-            if (sourceWindow != IntPtr.Zero)
-                SendMessage(sourceWindow, WM_COPY, IntPtr.Zero, IntPtr.Zero);
+            if (sourceWindow == IntPtr.Zero)
+                return;
+
+            var result = SendMessage(sourceWindow, WM_COPY, IntPtr.Zero, IntPtr.Zero);
+            if (result == IntPtr.Zero)
+                LogCapture("WM_COPY sent with zero result; target may not support copy message.");
         }));
 
-        strategies.Add(new CaptureStrategy("Ctrl+C (retry)", () => SendCtrlKey(VK_C)));
+        strategies.Add(new CaptureStrategy("Ctrl+C (retry)", () => _ = SendCtrlKey(VK_C)));
         return strategies;
     }
 
@@ -440,7 +461,12 @@ public class TextCaptureService
 
     public System.Windows.Point GetCursorPosition()
     {
-        GetCursorPos(out var p);
+        if (!GetCursorPos(out var p))
+        {
+            LogCapture("GetCursorPos failed; falling back to (0,0)");
+            return new System.Windows.Point(0, 0);
+        }
+
         return new System.Windows.Point(p.X, p.Y);
     }
 
@@ -478,7 +504,9 @@ public class TextCaptureService
         if (source == null || source.WindowHandle == IntPtr.Zero)
             return;
 
-        SetForegroundWindow(source.WindowHandle);
+        if (!SetForegroundWindow(source.WindowHandle))
+            LogCapture($"SetForegroundWindow restore failed for 0x{source.WindowHandle.ToInt64():X}");
+
         await Task.Delay(60);
     }
 

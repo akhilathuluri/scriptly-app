@@ -5,18 +5,26 @@ using Scriptly.Models;
 
 namespace Scriptly.Services;
 
-public sealed class UpdateNotificationService
+public sealed class UpdateNotificationService : IDisposable
 {
     private const string DefaultBaseUrl = "http://localhost:8080";
     private readonly HttpClient _http;
+    private readonly bool _ownsHttpClient;
     private readonly string _baseUrl;
 
     public UpdateNotificationService(HttpClient? httpClient = null, string? baseUrl = null)
     {
+        _ownsHttpClient = httpClient is null;
         _http = httpClient ?? new HttpClient();
         _baseUrl = string.IsNullOrWhiteSpace(baseUrl)
             ? Environment.GetEnvironmentVariable("SCRIPTLY_API_BASE_URL") ?? DefaultBaseUrl
             : baseUrl;
+    }
+
+    public void Dispose()
+    {
+        if (_ownsHttpClient)
+            _http.Dispose();
     }
 
     public async Task<AppUpdateInfo?> CheckForUpdateAsync(string appId = "scriptly", CancellationToken cancellationToken = default)

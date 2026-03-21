@@ -263,17 +263,44 @@ public partial class App : Application
         // Ensure history is persisted before exit
         _historyService?.PersistSync();
 
+        DispatcherUnhandledException -= OnDispatcherUnhandledException;
+        AppDomain.CurrentDomain.UnhandledException -= OnUnhandledException;
+        TaskScheduler.UnobservedTaskException -= OnUnobservedTaskException;
+
         if (_updatesWindow is not null)
             _updatesWindow.RefreshRequested -= OnRefreshUpdatesRequested;
 
         _updateCheckTimer?.Stop();
 
+        CloseWindow(_actionPanel);
+        CloseWindow(_resultWindow);
+        CloseWindow(_historyWindow);
+        CloseWindow(_moreInfoWindow);
+        CloseWindow(_updatesWindow);
+        CloseWindow(_hotkeyWindow);
+
         _hotkeyService?.Dispose();
         _trayService?.Dispose();
+        _aiService?.Dispose();
         _analyticsService?.Dispose();
+        _updateService?.Dispose();
+
+        _textCapture = null;
+        _actionsService = null;
+        _settingsService = null;
+
         _mutex?.ReleaseMutex();
         _mutex?.Dispose();
         base.OnExit(e);
+    }
+
+    private static void CloseWindow(Window? window)
+    {
+        if (window is null)
+            return;
+
+        if (window.IsVisible)
+            window.Close();
     }
 
     private void OnDispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)

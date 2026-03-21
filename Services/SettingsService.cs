@@ -100,7 +100,7 @@ public class SettingsService
 
             Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
             var json = JsonSerializer.Serialize(persisted, JsonOptions);
-            File.WriteAllText(_settingsPath, json);
+            WriteAllTextAtomic(_settingsPath, json);
         }
         catch (Exception ex)
         {
@@ -233,5 +233,26 @@ public class SettingsService
 
         recoveryMessage = $"Recovered invalid settings: {string.Join(", ", recovered)}.";
         return true;
+    }
+
+    private static void WriteAllTextAtomic(string path, string content)
+    {
+        var directory = Path.GetDirectoryName(path) ?? string.Empty;
+        if (!string.IsNullOrEmpty(directory))
+            Directory.CreateDirectory(directory);
+
+        var tempPath = Path.Combine(directory, $".{Path.GetFileName(path)}.tmp");
+        var backupPath = path + ".bak";
+
+        File.WriteAllText(tempPath, content);
+
+        if (File.Exists(path))
+        {
+            File.Replace(tempPath, path, backupPath, ignoreMetadataErrors: true);
+            try { File.Delete(backupPath); } catch { }
+            return;
+        }
+
+        File.Move(tempPath, path);
     }
 }

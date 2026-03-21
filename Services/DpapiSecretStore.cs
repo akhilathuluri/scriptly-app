@@ -94,11 +94,32 @@ public sealed class DpapiSecretStore : ISecretStore
 
     private static void SaveMap(Dictionary<string, string> map)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(StorePath)!);
+        var directory = Path.GetDirectoryName(StorePath)!;
+        Directory.CreateDirectory(directory);
 
         var json = JsonSerializer.Serialize(map, JsonOptions);
         var plainBytes = Encoding.UTF8.GetBytes(json);
-        var encrypted = ProtectedData.Protect(plainBytes, Entropy, DataProtectionScope.CurrentUser);
-        File.WriteAllBytes(StorePath, encrypted);
+        byte[] encrypted;
+        try
+        {
+            encrypted = ProtectedData.Protect(plainBytes, Entropy, DataProtectionScope.CurrentUser);
+        }
+        catch (Exception ex)
+        {
+            throw new CryptographicException("Failed to encrypt secrets payload with DPAPI.", ex);
+        }
+
+        var tempPath = Path.Combine(directory, ".secrets.dat.tmp");
+        var backupPath = StorePath + ".bak";
+        File.WriteAllBytes(tempPath, encrypted);
+
+        if (File.Exists(StorePath))
+        {
+            File.Replace(tempPath, StorePath, backupPath, ignoreMetadataErrors: true);
+            try { File.Delete(backupPath); } catch { }
+            return;
+        }
+
+        File.Move(tempPath, StorePath);
     }
 }

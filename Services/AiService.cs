@@ -7,8 +7,12 @@ using Polly;
 
 namespace Scriptly.Services;
 
-public class AiService
+public class AiService : IDisposable
 {
+    private const int DefaultHttpTimeoutSeconds = 180;
+    private const int MinHttpTimeoutSeconds = 30;
+    private const int MaxHttpTimeoutSeconds = 600;
+
     private readonly HttpClient _httpClient;
     private readonly SettingsService _settingsService;
 
@@ -21,10 +25,21 @@ public class AiService
             EnableMultipleHttp2Connections = true,
         })
         {
-            Timeout = TimeSpan.FromSeconds(60),
+            Timeout = TimeSpan.FromSeconds(GetConfiguredTimeoutSeconds()),
             DefaultRequestVersion = new Version(2, 0),
             DefaultVersionPolicy = System.Net.Http.HttpVersionPolicy.RequestVersionOrLower
         };
+    }
+
+    public void Dispose() => _httpClient.Dispose();
+
+    private static int GetConfiguredTimeoutSeconds()
+    {
+        var raw = Environment.GetEnvironmentVariable("SCRIPTLY_HTTP_TIMEOUT_SECONDS");
+        if (!int.TryParse(raw, out var seconds))
+            return DefaultHttpTimeoutSeconds;
+
+        return Math.Clamp(seconds, MinHttpTimeoutSeconds, MaxHttpTimeoutSeconds);
     }
 
     public async Task<string> ProcessAsync(string prompt, string selectedText, CancellationToken ct = default)
@@ -55,14 +70,14 @@ public class AiService
         });
 
         var retryPolicy = RetryService.GetHttpRetryPolicy();
-        using var response = await retryPolicy.ExecuteAsync(() =>
+        using var response = await retryPolicy.ExecuteAsync(async () =>
         {
-            var req = new HttpRequestMessage(HttpMethod.Post, "https://openrouter.ai/api/v1/chat/completions");
+            using var req = new HttpRequestMessage(HttpMethod.Post, "https://openrouter.ai/api/v1/chat/completions");
             req.Headers.Add("Authorization", $"Bearer {config.ApiKey}");
             req.Headers.Add("HTTP-Referer", "https://scriptly.app");
             req.Headers.Add("X-Title", "Scriptly");
             req.Content = new StringContent(requestBodyJson, Encoding.UTF8, "application/json");
-            return _httpClient.SendAsync(req, ct);
+            return await _httpClient.SendAsync(req, ct);
         });
         var json = await response.Content.ReadAsStringAsync(ct);
 
@@ -123,12 +138,12 @@ public class AiService
         });
 
         var retryPolicy = RetryService.GetHttpRetryPolicy();
-        using var response = await retryPolicy.ExecuteAsync(() =>
+        using var response = await retryPolicy.ExecuteAsync(async () =>
         {
-            var req = new HttpRequestMessage(HttpMethod.Post, "https://api.groq.com/openai/v1/chat/completions");
+            using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.groq.com/openai/v1/chat/completions");
             req.Headers.Add("Authorization", $"Bearer {config.ApiKey}");
             req.Content = new StringContent(requestBodyJson, Encoding.UTF8, "application/json");
-            return _httpClient.SendAsync(req, ct);
+            return await _httpClient.SendAsync(req, ct);
         });
         var json = await response.Content.ReadAsStringAsync(ct);
 
@@ -192,8 +207,9 @@ public class AiService
             _      => StreamOpenRouterAsync(settings.OpenRouter, fullPrompt, ct)
         };
 
-        await foreach (var token in tokens.WithCancellation(ct))
-            yield return token;
+        await using var enumerator = tokens.GetAsyncEnumerator(ct);
+        while (await enumerator.MoveNextAsync())
+            yield return enumerator.Current;
     }
 
     private async IAsyncEnumerable<string> StreamOpenRouterAsync(
@@ -215,14 +231,14 @@ public class AiService
         });
 
         var retryPolicy = RetryService.GetHttpRetryPolicy();
-        using var response = await retryPolicy.ExecuteAsync(() =>
+        using var response = await retryPolicy.ExecuteAsync(async () =>
         {
-            var req = new HttpRequestMessage(HttpMethod.Post, "https://openrouter.ai/api/v1/chat/completions");
+            using var req = new HttpRequestMessage(HttpMethod.Post, "https://openrouter.ai/api/v1/chat/completions");
             req.Headers.Add("Authorization", $"Bearer {config.ApiKey}");
             req.Headers.Add("HTTP-Referer", "https://scriptly.app");
             req.Headers.Add("X-Title", "Scriptly");
             req.Content = new StringContent(requestBodyJson, Encoding.UTF8, "application/json");
-            return _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+            return await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
         });
 
         if (!response.IsSuccessStatusCode)
@@ -300,12 +316,12 @@ public class AiService
         });
 
         var retryPolicy = RetryService.GetHttpRetryPolicy();
-        using var response = await retryPolicy.ExecuteAsync(() =>
+        using var response = await retryPolicy.ExecuteAsync(async () =>
         {
-            var req = new HttpRequestMessage(HttpMethod.Post, "https://api.groq.com/openai/v1/chat/completions");
+            using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.groq.com/openai/v1/chat/completions");
             req.Headers.Add("Authorization", $"Bearer {config.ApiKey}");
             req.Content = new StringContent(requestBodyJson, Encoding.UTF8, "application/json");
-            return _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+            return await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
         });
 
         if (!response.IsSuccessStatusCode)
